@@ -1,0 +1,367 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { getSettings, updateSettings } from '@/lib/store'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
+import { Separator } from '@/components/ui/separator'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { 
+  Store, 
+  DollarSign, 
+  Truck, 
+  Phone, 
+  Mail, 
+  Save,
+  RefreshCw,
+   Globe,
+  Instagram,
+  Facebook
+} from 'lucide-react'
+import { toast } from 'sonner'
+import type { SiteSettings } from '@/lib/types'
+
+export default function AdminSettingsPage() {
+  const [settings, setSettings] = useState<SiteSettings | null>(null)
+  const [formData, setFormData] = useState<SiteSettings | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    const currentSettings = getSettings()
+    setSettings(currentSettings)
+    setFormData(currentSettings)
+  }, [])
+
+  const handleSave = async () => {
+  if (!formData) return
+  setIsSaving(true)
+
+  try {
+    // تحضير البيانات للإرسال
+    const payload = {
+      store_name: formData.storeName,
+      store_name_en: formData.storeNameEn,
+      currency: formData.currency,
+      exchange_rate: formData.exchangeRate,
+      free_shipping_threshold: formData.freeShippingThreshold,
+      shipping_cost: formData.shippingCost,
+      contact_email: formData.contactEmail,
+      contact_phone: formData.contactPhone,
+      whatsapp_number: formData.whatsappUrl || '',
+      instagram_url: formData.instagramUrl || '',
+      facebook_url: formData.facebookUrl || '',
+      whatsapp_url: formData.whatsappUrl || '',
+      hero_title: formData.heroTitle,
+      hero_subtitle: formData.heroSubtitle,
+      announcement: formData.announcement || '',
+      announcement_active: formData.announcementActive,
+    }
+
+    console.log('📤 Sending to API:', payload) // للتأكد من البيانات
+
+    const response = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    if (!response.ok) {
+      throw new Error('فشل في حفظ الإعدادات')
+    }
+
+    // تحديث localStorage أيضاً
+    updateSettings(formData)
+    setSettings(formData)
+
+    toast.success('تم حفظ الإعدادات بنجاح')
+  } catch (error) {
+    console.error('Error saving settings:', error)
+    toast.error('حدث خطأ في حفظ الإعدادات')
+  } finally {
+    setIsSaving(false)
+  }
+}
+
+  const handleReset = () => {
+    if (!settings) return
+    setFormData(settings)
+    toast.info('تم استعادة الإعدادات الأصلية')
+  }
+
+  if (!formData) {
+    return (
+      <div className="flex items-center justify-center min-h-100">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold mb-2">الإعدادات</h1>
+          <p className="text-muted-foreground">إدارة إعدادات المتجر</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleReset} className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            استعادة
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving} className="gap-2">
+            <Save className="h-4 w-4" />
+            {isSaving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Store Info */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5" />
+              معلومات المتجر
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="storeName" className="mb-2 block">اسم المتجر</Label>
+              <Input
+                id="storeName"
+                value={formData.storeName}
+                onChange={(e) => setFormData({ ...formData, storeName: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="storeNameEn" className="mb-2 block">اسم المتجر (إنجليزي)</Label>
+              <Input
+                id="storeNameEn"
+                value={formData.storeNameEn}
+                onChange={(e) => setFormData({ ...formData, storeNameEn: e.target.value })}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Currency Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              إعدادات العملة
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="currency" className="mb-2 block">العملة الافتراضية</Label>
+              <Select
+                value={formData.currency}
+                onValueChange={(value: 'USD' | 'SYP') =>
+                  setFormData({ ...formData, currency: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USD">دولار أمريكي (USD)</SelectItem>
+                  <SelectItem value="SYP">ليرة سورية (SYP)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="exchangeRate" className="mb-2 block">سعر صرف الدولار (ل.س)</Label>
+              <Input
+                id="exchangeRate"
+                type="number"
+                min="1"
+                value={formData.exchangeRate}
+                onChange={(e) =>
+                  setFormData({ ...formData, exchangeRate: Number(e.target.value) })
+                }
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                1 دولار = {(formData.exchangeRate || 0).toLocaleString('ar-SY')} ل.س
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Shipping Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Truck className="h-5 w-5" />
+              إعدادات الشحن
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="shippingCost" className="mb-2 block">تكلفة الشحن ($)</Label>
+              <Input
+                id="shippingCost"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.shippingCost}
+                onChange={(e) =>
+                  setFormData({ ...formData, shippingCost: Number(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label htmlFor="freeShippingThreshold" className="mb-2 block">حد الشحن المجاني ($)</Label>
+              <Input
+                id="freeShippingThreshold"
+                type="number"
+                min="0"
+                value={formData.freeShippingThreshold}
+                onChange={(e) =>
+                  setFormData({ ...formData, freeShippingThreshold: Number(e.target.value) })
+                }
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                الشحن مجاني للطلبات أكثر من ${formData.freeShippingThreshold}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Hero Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5" />
+              القسم الرئيسي
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="heroTitle" className="mb-2 block">العنوان الرئيسي</Label>
+              <Input
+                id="heroTitle"
+                value={formData.heroTitle}
+                onChange={(e) => setFormData({ ...formData, heroTitle: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="heroSubtitle" className="mb-2 block">النص الفرعي</Label>
+              <Input
+                id="heroSubtitle"
+                value={formData.heroSubtitle}
+                onChange={(e) => setFormData({ ...formData, heroSubtitle: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="announcement" className="mb-2 block">شريط الإعلانات</Label>
+              <Textarea
+                id="announcement"
+                value={formData.announcement || ''}
+                onChange={(e) => setFormData({ ...formData, announcement: e.target.value })}
+                rows={2}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="announcementActive">تفعيل شريط الإعلانات</Label>
+              <Switch
+                id="announcementActive"
+                checked={formData.announcementActive}
+                onCheckedChange={(checked) =>
+                  setFormData({ ...formData, announcementActive: checked })
+                }
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Contact Info */}
+       {/* Contact Info */}
+<Card>
+  <CardHeader>
+    <CardTitle className="flex items-center gap-2">
+      <Phone className="h-5 w-5" />
+      معلومات التواصل
+    </CardTitle>
+  </CardHeader>
+  <CardContent className="space-y-4">
+    <div>
+      <Label htmlFor="contactEmail" className="mb-2 block">البريد الإلكتروني</Label>
+      <Input
+        id="contactEmail"
+        type="email"
+        value={formData.contactEmail}
+        onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
+      />
+    </div>
+    <div>
+      <Label htmlFor="contactPhone" className="mb-2 block">رقم الهاتف</Label>
+      <Input
+        id="contactPhone"
+        value={formData.contactPhone}
+        onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+      />
+    </div>
+    <div>
+      <Label htmlFor="whatsappUrl" className="mb-2 block">رابط واتساب</Label>
+      <Input
+        id="whatsappUrl"
+        value={formData.whatsappUrl || ''}
+        onChange={(e) => setFormData({ ...formData, whatsappUrl: e.target.value })}
+        placeholder="https://wa.me/..."
+      />
+    </div>
+  </CardContent>
+</Card>
+        {/* Social Media */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5" />
+              وسائل التواصل
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="instagramUrl" className="mb-2 block">انستجرام</Label>
+              <Input
+                id="instagramUrl"
+                value={formData.instagramUrl || ''}
+                onChange={(e) => setFormData({ ...formData, instagramUrl: e.target.value })}
+                placeholder="https://instagram.com/..."
+              />
+            </div>
+            <div>
+              <Label htmlFor="facebookUrl" className="mb-2 block">فيسبوك</Label>
+              <Input
+                id="facebookUrl"
+                value={formData.facebookUrl || ''}
+                onChange={(e) => setFormData({ ...formData, facebookUrl: e.target.value })}
+                placeholder="https://facebook.com/..."
+              />
+            </div>
+            <div>
+              <Label htmlFor="whatsappUrl" className="mb-2 block">واتساب</Label>
+              <Input
+                id="whatsappUrl"
+                value={formData.whatsappUrl || ''}
+                onChange={(e) => setFormData({ ...formData, whatsappUrl: e.target.value })}
+                placeholder="https://wa.me/..."
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}

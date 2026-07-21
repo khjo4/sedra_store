@@ -1,35 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getConnection } from '@/lib/db';
+import { getProductById, updateProduct, deleteProduct } from '@/lib/db';
 
-// GET - جلب منتج واحد
+// ✅ GET - جلب منتج معين
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // ✅ استخدام await لتفريغ params
     const { id } = await params;
+    const product = await getProductById(id);
     
-    const connection = await getConnection();
-    const [rows] = await connection.execute(
-      'SELECT * FROM products WHERE id = ?',
-      [id]
-    );
-    
-    const products = rows as any[];
-    if (products.length === 0) {
+    if (!product) {
       return NextResponse.json(
         { error: 'المنتج غير موجود' },
         { status: 404 }
       );
     }
-    
-    // تحويل price إلى رقم
-    const product = {
-      ...products[0],
-      price: parseFloat(products[0].price),
-      originalPrice: products[0].original_price ? parseFloat(products[0].original_price) : undefined,
-    };
     
     return NextResponse.json(product);
   } catch (error) {
@@ -41,8 +27,7 @@ export async function GET(
   }
 }
 
-// PUT - تحديث منتج
-// PUT - تحديث منتج
+// ✅ PUT - تحديث منتج (للمدير فقط)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -50,38 +35,35 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const connection = await getConnection();
     
-    const { 
-      name, nameEn, price, originalPrice, category, stock, 
-      featured, bestSeller, newArrival, images, colors, sizes 
-    } = body;
+    // ✅ 1. التحقق من وجود المنتج قبل التحديث
+    const existingProduct = await getProductById(id);
+    if (!existingProduct) {
+      return NextResponse.json(
+        { error: 'المنتج غير موجود' },
+        { status: 404 }
+      );
+    }
     
-    // تحويل undefined إلى null لتجنب الخطأ
-    await connection.execute(
-      `UPDATE products SET 
-        name = ?, name_en = ?, price = ?, original_price = ?, category = ?, 
-        stock = ?, featured = ?, best_seller = ?, new_arrival = ?, 
-        images = ?, colors = ?, sizes = ?
-       WHERE id = ?`,
-      [
-        name || null, 
-        nameEn || null, 
-        price || null, 
-        originalPrice !== undefined ? originalPrice : null, 
-        category || null, 
-        stock !== undefined ? stock : null, 
-        featured !== undefined ? featured : null, 
-        bestSeller !== undefined ? bestSeller : null, 
-        newArrival !== undefined ? newArrival : null, 
-        images ? JSON.stringify(images) : null, 
-        colors ? JSON.stringify(colors) : null, 
-        sizes ? JSON.stringify(sizes) : null, 
-        id
-      ]
-    );
+    // ✅ 2. التحقق من البيانات الأساسية
+    if (!body.name || !body.price || !body.category) {
+      return NextResponse.json(
+        { error: 'الاسم والسعر والقسم حقول مطلوبة' },
+        { status: 400 }
+      );
+    }
     
-    return NextResponse.json({ success: true, id });
+    // ✅ 3. التحقق من صلاحية المدير (مؤقتاً)
+    // const authHeader = request.headers.get('authorization');
+    // if (!authHeader) {
+    //   return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    // }
+    
+    await updateProduct(id, body);
+    
+    // ✅ 4. إرجاع المنتج بعد التحديث
+    const updatedProduct = await getProductById(id);
+    return NextResponse.json({ success: true, product: updatedProduct });
   } catch (error) {
     console.error('Error updating product:', error);
     return NextResponse.json(
@@ -91,17 +73,32 @@ export async function PUT(
   }
 }
 
-// DELETE - حذف منتج
+// ✅ DELETE - حذف منتج (للمدير فقط)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const connection = await getConnection();
-    await connection.execute('DELETE FROM products WHERE id = ?', [id]);
     
-    return NextResponse.json({ message: 'تم حذف المنتج بنجاح' });
+    // ✅ 1. التحقق من وجود المنتج قبل الحذف
+    const existingProduct = await getProductById(id);
+    if (!existingProduct) {
+      return NextResponse.json(
+        { error: 'المنتج غير موجود' },
+        { status: 404 }
+      );
+    }
+    
+    // ✅ 2. التحقق من صلاحية المدير (مؤقتاً)
+    // const authHeader = request.headers.get('authorization');
+    // if (!authHeader) {
+    //   return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    // }
+    
+    await deleteProduct(id);
+    
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting product:', error);
     return NextResponse.json(

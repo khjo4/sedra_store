@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getCoupons, createCoupon, updateCoupon, deleteCoupon } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -32,11 +31,62 @@ import {
 } from "@/components/ui/select"
 import { Plus, Pencil, Trash2, Ticket, Percent, DollarSign, Calendar } from "lucide-react"
 import type { Coupon } from "@/lib/types"
+import { toast } from "sonner"
+
+const fetchCoupons = async (): Promise<Coupon[]> => {
+  try {
+    const response = await fetch('/api/coupons')
+    const data = await response.json()
+    const couponsArray = Array.isArray(data) ? data : data.coupons || []
+    return couponsArray
+  } catch (error) {
+    console.error('Error fetching coupons:', error)
+    return []
+  }
+}
+
+const createCouponAPI = async (couponData: any): Promise<any> => {
+  try {
+    const response = await fetch('/api/coupons', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(couponData),
+    })
+    return await response.json()
+  } catch (error) {
+    console.error('Error creating coupon:', error)
+    throw error
+  }
+}
+
+const updateCouponAPI = async (id: string, couponData: any): Promise<any> => {
+  try {
+    const response = await fetch(`/api/coupons/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(couponData),
+    })
+    return await response.json()
+  } catch (error) {
+    console.error('Error updating coupon:', error)
+    throw error
+  }
+}
+
+const deleteCouponAPI = async (id: string): Promise<void> => {
+  try {
+    await fetch(`/api/coupons/${id}`, { method: 'DELETE' })
+  } catch (error) {
+    console.error('Error deleting coupon:', error)
+    throw error
+  }
+}
 
 export default function AdminCouponsPage() {
   const [coupons, setCoupons] = useState<Coupon[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null)
+  const [loading, setLoading] = useState(true)
   const [formData, setFormData] = useState({
     code: "",
     type: "percentage" as "percentage" | "fixed",
@@ -47,12 +97,19 @@ export default function AdminCouponsPage() {
     active: true,
   })
 
+  const loadCoupons = async () => {
+  setLoading(true)
+  const data = await fetchCoupons()
+  setCoupons(data) // data الآن مصفوفة بالتأكيد
+  setLoading(false)
+}
+
   useEffect(() => {
-    setCoupons(getCoupons())
+    loadCoupons()
   }, [])
 
   const refreshCoupons = () => {
-    setCoupons(getCoupons())
+    loadCoupons()
   }
 
   const resetForm = () => {
@@ -82,7 +139,7 @@ export default function AdminCouponsPage() {
     setIsDialogOpen(true)
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     const couponData = {
@@ -95,21 +152,31 @@ export default function AdminCouponsPage() {
       active: formData.active,
     }
 
-    if (editingCoupon) {
-      updateCoupon(editingCoupon.id, couponData)
-    } else {
-      createCoupon(couponData)
+    try {
+      if (editingCoupon) {
+        await updateCouponAPI(editingCoupon.id, couponData)
+        toast.success("تم تحديث الكوبون بنجاح")
+      } else {
+        await createCouponAPI(couponData)
+        toast.success("تم إضافة الكوبون بنجاح")
+      }
+      refreshCoupons()
+      setIsDialogOpen(false)
+      resetForm()
+    } catch (error) {
+      toast.error("حدث خطأ أثناء حفظ الكوبون")
     }
-
-    refreshCoupons()
-    setIsDialogOpen(false)
-    resetForm()
   }
 
-  const handleDelete = (couponId: string) => {
+  const handleDelete = async (couponId: string) => {
     if (confirm("هل أنت متأكد من حذف هذا الكوبون؟")) {
-      deleteCoupon(couponId)
-      refreshCoupons()
+      try {
+        await deleteCouponAPI(couponId)
+        refreshCoupons()
+        toast.success("تم حذف الكوبون بنجاح")
+      } catch (error) {
+        toast.error("حدث خطأ أثناء حذف الكوبون")
+      }
     }
   }
 
@@ -128,6 +195,22 @@ export default function AdminCouponsPage() {
     if (isCouponExpired(coupon.expiresAt)) return { label: "منتهي", variant: "destructive" as const }
     if (isCouponExhausted(coupon)) return { label: "مستنفد", variant: "destructive" as const }
     return { label: "نشط", variant: "default" as const }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground mb-2">الكوبونات</h1>
+            <p className="text-muted-foreground">جاري التحميل...</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-center py-16">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+        </div>
+      </div>
+    )
   }
 
   return (

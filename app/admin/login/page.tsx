@@ -13,19 +13,33 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
-    // مؤقتاً - استخدم بيانات صلبة
-    if (email === 'admin@sedra.com' && password === 'admin123') {
-      localStorage.setItem('admin_token', 'logged_in')
-      toast.success('تم تسجيل الدخول بنجاح')
-      router.push('/admin')
-    } else {
-      toast.error('البريد الإلكتروني أو كلمة المرور غير صحيحة')
+    try {
+      const response = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        localStorage.setItem('admin_token', 'logged_in')
+        document.cookie = "admin_token=logged_in; path=/"
+        toast.success('تم تسجيل الدخول بنجاح')
+        router.push('/admin')
+      } else {
+        toast.error(data.error || 'بيانات الدخول غير صحيحة')
+      }
+    } catch (error) {
+      console.error('Login error:', error)
+      toast.error('حدث خطأ في تسجيل الدخول')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
@@ -44,7 +58,7 @@ export default function AdminLoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@sedra.com"
+                placeholder="ادخل البريد"
                 required
               />
             </div>
@@ -61,12 +75,9 @@ export default function AdminLoginPage() {
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'جاري التسجيل...' : 'تسجيل الدخول'}
+              {loading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm text-muted-foreground">
-            <p>للاختبار: admin@sedra.com / admin123</p>
-          </div>
         </CardContent>
       </Card>
     </div>

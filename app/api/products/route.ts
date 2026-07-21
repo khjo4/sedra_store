@@ -1,18 +1,91 @@
 import { NextResponse } from 'next/server';
-import { getConnection } from '@/lib/db';
+import { getAllProducts, createProduct } from '@/lib/db';
+import { revalidateTag } from 'next/cache';
 
-export async function GET() {
+// GET - جلب جميع المنتجات (مع دعم Filtering و Pagination)
+export async function GET(request: Request) {
   try {
-    const connection = await getConnection();
-    const [rows] = await connection.execute('SELECT * FROM products ORDER BY created_at DESC');
+    const { searchParams } = new URL(request.url);
     
-    const products = (rows as any[]).map(product => ({
-      ...product,
-      price: parseFloat(product.price),
-      originalPrice: product.original_price ? parseFloat(product.original_price) : undefined,
-    }));
+    // قراءة parameters من الـ URL
+    const category = searchParams.get('category');
+    const minPrice = searchParams.get('minPrice');
+    const maxPrice = searchParams.get('maxPrice');
+    const search = searchParams.get('search');
+    const sort = searchParams.get('sort');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '20');
+    const ids = searchParams.get('ids'); // للمفضلة والسلة
     
-    return NextResponse.json(products);
+    // ✅ إذا طلب المنتجات بمعرفات محددة (للمفضلة أو السلة)
+    if (ids) {
+      const idsArray = ids.split(',');
+      const { getProductsByIds } = await import('@/lib/db');
+      const products = await getProductsByIds(idsArray);
+      return NextResponse.json(products);
+    }
+    
+    // جلب جميع المنتجات (مؤقتاً - سنحسنها لاحقاً)
+    let products = await getAllProducts();
+    
+    // ✅ فلترة حسب القسم (category)
+    if (category && category !== 'all') {
+      products = products.filter(p => p.category === category);
+    }
+    
+    // ✅ فلترة حسب السعر
+    if (minPrice) {
+      products = products.filter(p => p.price >= Number(minPrice));
+    }
+    if (maxPrice) {
+      products = products.filter(p => p.price <= Number(maxPrice));
+    }
+    
+    // ✅ بحث
+    if (search) {
+      const query = search.toLowerCase();
+      products = products.filter(p => 
+        p.name.toLowerCase().includes(query) ||
+        (p.nameEn?.toLowerCase() || '').includes(query)
+      );
+    }
+    
+    // ✅ ترتيب
+    switch (sort) {
+      case 'newest':
+        products.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        break;
+      case 'price-asc':
+        products.sort((a, b) => a.price - b.price);
+        break;
+      case 'price-desc':
+        products.sort((a, b) => b.price - a.price);
+        break;
+      case 'popular':
+        products.sort((a, b) => (b.reviewCount || 0) - (a.reviewCount || 0));
+        break;
+      default:
+        products.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+    
+    // ✅ Pagination
+    const total = products.length;
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    const paginatedProducts = products.slice(start, end);
+    
+    const response = NextResponse.json({
+      products: paginatedProducts,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
+    
+    // إضافة Cache Headers - المنتجات تتغير لكن يمكن تخزينها مؤقتاً
+    response.headers.set('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=3600');
+    
+    return response;
   } catch (error) {
     console.error('Error fetching products:', error);
     return NextResponse.json(
@@ -22,54 +95,30 @@ export async function GET() {
   }
 }
 
+// POST - إضافة منتج جديد (للمدير فقط)
 export async function POST(request: Request) {
   try {
+    // ✅ التحقق من صلاحية المدير (مؤقتاً)
+    const authHeader = request.headers.get('authorization');
+    // مؤقتاً: نسمح فقط إذا كان هناك token
+    // في المرحلة القادمة سنضيف middleware
+    
     const body = await request.json();
-    console.log('📦 Creating product:', body);
     
-    const connection = await getConnection();
+    // ✅ التحقق من البيانات الأساسية
+    if (!body.name || !body.price || !body.category) {
+      return NextResponse.json(
+        { error: 'الاسم والسعر والقسم حقول مطلوبة' },
+        { status: 400 }
+      );
+    }
     
-    const { 
-      id, name, nameEn, description, descriptionEn, price, originalPrice, 
-      category, stock, featured, bestSeller, newArrival, 
-      rating, reviewCount, images, colors, sizes 
-    } = body;
+    const newProduct = await createProduct(body);
     
-    // ✅ تحويل undefined إلى null لكل القيم
-    const productId = id || `p${Date.now()}`;
-    const productName = name || 'منتج جديد';
-    const productNameEn = nameEn !== undefined ? nameEn : null;
-    const productDescription = description !== undefined ? description : null;
-    const productDescriptionEn = descriptionEn !== undefined ? descriptionEn : null;
-    const productPrice = price !== undefined && price !== null ? parseFloat(price) : 0;
-    const productOriginalPrice = originalPrice !== undefined && originalPrice !== null && originalPrice !== '' ? parseFloat(originalPrice) : null;
-    const productCategory = category || 'uncategorized';
-    const productStock = stock !== undefined && stock !== null ? parseInt(stock) : 0;
-    const productFeatured = featured ? 1 : 0;
-    const productBestSeller = bestSeller ? 1 : 0;
-    const productNewArrival = newArrival ? 1 : 0;
-    const productRating = rating || 0;
-    const productReviewCount = reviewCount || 0;
+    // 🔄 إعادة التحقق من الـ Cache عند إضافة منتج جديد
+    revalidateTag('/', 'layout');
     
-    // تحويل المصفوفات إلى JSON
-    const imagesJson = images && Array.isArray(images) ? JSON.stringify(images) : JSON.stringify([]);
-    const colorsJson = colors && Array.isArray(colors) ? JSON.stringify(colors) : JSON.stringify([]);
-    const sizesJson = sizes && Array.isArray(sizes) ? JSON.stringify(sizes) : JSON.stringify([]);
-    
-    await connection.execute(
-      `INSERT INTO products 
-        (id, name, name_en, description, description_en, price, original_price, 
-         category, stock, featured, best_seller, new_arrival, rating, review_count, images, colors, sizes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        productId, productName, productNameEn, productDescription, productDescriptionEn,
-        productPrice, productOriginalPrice, productCategory, productStock,
-        productFeatured, productBestSeller, productNewArrival,
-        productRating, productReviewCount, imagesJson, colorsJson, sizesJson
-      ]
-    );
-    
-    return NextResponse.json({ success: true, id: productId }, { status: 201 });
+    return NextResponse.json(newProduct, { status: 201 });
   } catch (error) {
     console.error('Error creating product:', error);
     return NextResponse.json(

@@ -6,17 +6,64 @@ import Image from 'next/image'
 import { Heart, ShoppingBag, Eye, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
-import { 
-  addToCart, 
-  addToWishlist, 
-  removeFromWishlist, 
-  isInWishlist, 
-  formatPrice,
-  getCurrency 
-} from '@/lib/store'
+import { cn, formatPriceAsync, fetchExchangeRate } from '@/lib/utils'
 import type { Product, Currency } from '@/lib/types'
 import { toast } from 'sonner'
+
+// ================================================
+// ✅ دوال السلة والمفضلة (مركزية - مؤقتاً)
+// ================================================
+const CART_KEY = 'sedra_cart'
+const WISHLIST_KEY = 'sedra_wishlist'
+
+const getCart = (): any[] => {
+  if (typeof window === 'undefined') return []
+  const cart = localStorage.getItem(CART_KEY)
+  return cart ? JSON.parse(cart) : []
+}
+
+const saveCart = (cart: any[]) => {
+  localStorage.setItem(CART_KEY, JSON.stringify(cart))
+  window.dispatchEvent(new Event('cartUpdated'))
+}
+
+const addToCart = (item: any) => {
+  const cart = getCart()
+  const existingIndex = cart.findIndex(
+    (i: any) => i.productId === item.productId && 
+               i.selectedColor === item.selectedColor && 
+               i.selectedSize === item.selectedSize
+  )
+  if (existingIndex > -1) {
+    cart[existingIndex].quantity += item.quantity
+  } else {
+    cart.push(item)
+  }
+  saveCart(cart)
+}
+
+const getWishlist = (): string[] => {
+  if (typeof window === 'undefined') return []
+  const wishlist = localStorage.getItem(WISHLIST_KEY)
+  return wishlist ? JSON.parse(wishlist) : []
+}
+
+const saveWishlist = (wishlist: string[]) => {
+  localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist))
+  window.dispatchEvent(new Event('wishlistUpdated'))
+}
+
+const isInWishlistLocal = (productId: string): boolean => {
+  return getWishlist().includes(productId)
+}
+
+// ================================================
+// ✅ دوال العملة - محذوفة ومستبدلة بـ lib/utils
+// ================================================
+// تم إزالة getCurrencyLocal و formatPriceLocal
+// الآن نستخدم:
+// - formatPriceAsync من lib/utils
+// - fetchExchangeRate من lib/utils
 
 interface ProductCardProps {
   product: Product
@@ -26,29 +73,59 @@ interface ProductCardProps {
 export function ProductCard({ product, className }: ProductCardProps) {
   const [isWishlisted, setIsWishlisted] = useState(false)
   const [currency, setCurrency] = useState<Currency>('USD')
+  const [exchangeRate, setExchangeRate] = useState(14500)
+  const [formattedPrice, setFormattedPrice] = useState('')
+  const [formattedOriginalPrice, setFormattedOriginalPrice] = useState('')
   const [imageError, setImageError] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
   
   // Animation states
   const [heartAnimating, setHeartAnimating] = useState(false)
   const [cartAnimating, setCartAnimating] = useState(false)
-  const [showRipple, setShowRipple] = useState(false)
   const [floatingHearts, setFloatingHearts] = useState<number[]>([])
   const [flyingProduct, setFlyingProduct] = useState(false)
   
   const cardRef = useRef<HTMLAnchorElement>(null)
-  const heartIdCounter = useRef(0)
 
+  // ================================================
+  // ✅ تحميل العملة وسعر الصرف
+  // ================================================
   useEffect(() => {
-    setIsWishlisted(isInWishlist(product.id))
-    setCurrency(getCurrency())
+    const loadCurrency = async () => {
+      // جلب العملة من localStorage
+      const savedCurrency = localStorage.getItem('sedra_currency')
+      const currentCurrency = (savedCurrency === 'SYP' ? 'SYP' : 'USD') as Currency
+      setCurrency(currentCurrency)
+      
+      // جلب سعر الصرف من API
+      const rate = await fetchExchangeRate()
+      setExchangeRate(rate)
+      
+      // تنسيق الأسعار
+      const priceFormatted = await formatPriceAsync(product.price, currentCurrency)
+      setFormattedPrice(priceFormatted)
+      
+      if (product.originalPrice) {
+        const originalFormatted = await formatPriceAsync(product.originalPrice, currentCurrency)
+        setFormattedOriginalPrice(originalFormatted)
+      }
+    }
+    
+    loadCurrency()
     
     const handleCurrencyChange = () => {
-      setCurrency(getCurrency())
+      loadCurrency()
     }
     
     window.addEventListener('currencyChanged', handleCurrencyChange)
     return () => window.removeEventListener('currencyChanged', handleCurrencyChange)
+  }, [product.price, product.originalPrice])
+
+  // ================================================
+  // ✅ المفضلة
+  // ================================================
+  useEffect(() => {
+    setIsWishlisted(isInWishlistLocal(product.id))
   }, [product.id])
 
   // Intersection observer for scroll fade-in
@@ -70,66 +147,131 @@ export function ProductCard({ product, className }: ProductCardProps) {
     return () => observer.disconnect()
   }, [])
 
-  const handleAddToCart = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    
-    // Trigger animations
-    setCartAnimating(true)
-    setFlyingProduct(true)
-    
-    // Reset cart animation
-    setTimeout(() => setCartAnimating(false), 300)
-    
-    // Reset flying animation
-    setTimeout(() => setFlyingProduct(false), 600)
-    
-    addToCart({
-      productId: product.id,
-      quantity: 1,
-      selectedColor: product.colors?.[0],
-      selectedSize: product.sizes?.[0],
+  const handleAddToCart = async (e: React.MouseEvent) => {
+  e.preventDefault()
+  e.stopPropagation()
+  
+  setCartAnimating(true)
+  setFlyingProduct(true)
+  
+  setTimeout(() => setCartAnimating(false), 300)
+  setTimeout(() => setFlyingProduct(false), 600)
+  
+  // ✅ جلب sessionId من localStorage أو إنشاء واحد جديد
+  let sessionId = localStorage.getItem('cart_session_id')
+  if (!sessionId) {
+    sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`
+    localStorage.setItem('cart_session_id', sessionId)
+  }
+  
+  const cartItem = {
+    sessionId: sessionId,
+    productId: product.id,
+    quantity: 1,
+    selectedColor: product.colors?.[0],
+    selectedSize: product.sizes?.[0],
+  }
+  
+  try {
+    // ✅ 1. إرسال إلى قاعدة البيانات عبر API
+    const response = await fetch('/api/cart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cartItem),
     })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to add to cart')
+    }
+    
+    // ✅ 2. تحديث localStorage
+    const cart = getCart()
+    const existingIndex = cart.findIndex(
+      (i: any) => i.productId === cartItem.productId && 
+                 i.selectedColor === cartItem.selectedColor && 
+                 i.selectedSize === cartItem.selectedSize
+    )
+    
+    if (existingIndex > -1) {
+      cart[existingIndex].quantity += cartItem.quantity
+    } else {
+      cart.push({
+        productId: cartItem.productId,
+        quantity: cartItem.quantity,
+        selectedColor: cartItem.selectedColor,
+        selectedSize: cartItem.selectedSize,
+      })
+    }
+    saveCart(cart)
     
     toast.success('تمت الإضافة إلى السلة', {
       description: product.name,
     })
     
     window.dispatchEvent(new Event('cartUpdated'))
-  }
-
-  const handleWishlist = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
     
+  } catch (error) {
+    console.error('Error adding to cart:', error)
+    toast.error('حدث خطأ في إضافة المنتج للسلة')
+  }
+}
+
+const handleWishlist = async (e: React.MouseEvent) => {
+  e.preventDefault()
+  e.stopPropagation()
+  
+  const customerEmail = localStorage.getItem('user_email') || 'guest@sedra.com'
+  const WISHLIST_KEY = 'sedra_wishlist'
+  
+  try {
     if (isWishlisted) {
-      removeFromWishlist(product.id)
+      // ✅ 1. حذف من قاعدة البيانات
+      const response = await fetch(`/api/wishlist?email=${customerEmail}&productId=${product.id}`, {
+        method: 'DELETE',
+      })
+      
+      if (!response.ok) throw new Error('Failed to remove')
+      
+      // ✅ 2. تحديث localStorage
+      let wishlist = JSON.parse(localStorage.getItem(WISHLIST_KEY) || '[]')
+      wishlist = wishlist.filter((id: string) => id !== product.id)
+      localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist))
+      
       setIsWishlisted(false)
       toast.info('تمت الإزالة من المفضلة')
+      
     } else {
-      // Trigger animations for adding to wishlist
-      setHeartAnimating(true)
-      setShowRipple(true)
+      // ✅ 1. إضافة إلى قاعدة البيانات
+      const response = await fetch('/api/wishlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerEmail: customerEmail,
+          productId: product.id,
+        }),
+      })
       
-      // Add floating hearts
-      const newHearts = [heartIdCounter.current++, heartIdCounter.current++, heartIdCounter.current++]
-      setFloatingHearts(newHearts)
+      if (!response.ok) throw new Error('Failed to add')
       
-      // Reset animations
-      setTimeout(() => {
-        setHeartAnimating(false)
-        setShowRipple(false)
-      }, 400)
+      // ✅ 2. تحديث localStorage
+      const wishlist = JSON.parse(localStorage.getItem(WISHLIST_KEY) || '[]')
+      wishlist.push(product.id)
+      localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist))
       
-      setTimeout(() => setFloatingHearts([]), 800)
-      
-      addToWishlist(product.id)
       setIsWishlisted(true)
       toast.success('تمت الإضافة إلى المفضلة')
     }
     
+    // ✅ 3. نشر الأحداث
     window.dispatchEvent(new Event('wishlistUpdated'))
+    window.dispatchEvent(new Event('storage'))
+    
+  } catch (error) {
+    console.error('Error updating wishlist:', error)
+    toast.error('حدث خطأ في تحديث المفضلة')
   }
+}
 
   const discount = product.originalPrice
     ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
@@ -156,10 +298,11 @@ export function ProductCard({ product, className }: ProductCardProps) {
           fill
           className="object-cover transition-transform duration-500 group-hover:scale-105"
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+          priority={false}
+          loading="lazy"
           onError={() => setImageError(true)}
         />
 
-        {/* Flying product animation */}
         {flyingProduct && (
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
             <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center animate-fly-to-cart">
@@ -183,7 +326,6 @@ export function ProductCard({ product, className }: ProductCardProps) {
           )}
         </div>
 
-        {/* Out of Stock Overlay */}
         {product.stock === 0 && (
           <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
             <Badge variant="outline" className="text-base py-2 px-4">
@@ -195,54 +337,41 @@ export function ProductCard({ product, className }: ProductCardProps) {
 
       {/* Content */}
       <div className="p-4">
-        {/* Category */}
         <p className="text-xs text-muted-foreground mb-1">
-          {product.category === 'accessories' && 'اكسسوارات'}
-          {product.category === 'perfumes' && 'عطورات'}
-          {product.category === 'makeup' && 'مكياج'}
-          {product.category === 'gift-sets' && 'مجموعات الهدايا'}
+              {product.category === 'accessories' && 'اكسسوارات'}
+              {product.category === 'perfumes' && 'عطورات'}
+              {product.category === 'makeup' && 'مكياج'}
+              {product.category === 'cup' && 'أكواب'}
+              {product.category === 'care' && 'العناية والاهتمام'}
+              {product.category === 'gift-sets' && 'مجموعات الهدايا'}
         </p>
 
-        {/* Name */}
+{/* ✅ حالة المخزون في البطاقة */}
+{product.stock === 0 && (
+  <p className="text-xs text-red-500 mt-1">نفذت الكمية</p>
+)}
+{product.stock > 0 && product.stock < 5 && (
+  <p className="text-xs text-orange-500 mt-1">متبقي {product.stock} قطع فقط!</p>
+)}
+
         <h3 className="font-medium text-sm mb-2 line-clamp-2 group-hover:text-primary transition-colors">
           {product.name}
         </h3>
 
-        {/* Rating */}
-        <div className="flex items-center gap-1 mb-2">
-          <div className="flex items-center">
-            {[...Array(5)].map((_, i) => (
-              <Star
-                key={i}
-                className={cn(
-                  'h-3 w-3',
-                  i < Math.floor(product.rating)
-                    ? 'fill-accent text-accent'
-                    : 'fill-muted text-muted'
-                )}
-              />
-            ))}
-          </div>
-          <span className="text-xs text-muted-foreground">
-            ({product.reviewCount})
-          </span>
-        </div>
-
-        {/* Price */}
+        {/* ✅ Price - الآن يستخدم الأسعار المتزامنة مع API */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-bold text-primary">
-            {formatPrice(product.price, currency)}
+            {formattedPrice}
           </span>
-          {product.originalPrice && (
-            <span className="text-sm text-muted-foreground line-through">
-              {formatPrice(product.originalPrice, currency)}
-            </span>
-          )}
+         {product.originalPrice && formattedOriginalPrice && (
+  <span className="text-sm text-muted-foreground line-through relative -top-0.5">
+    {formattedOriginalPrice}
+  </span>
+)}
         </div>
 
-        {/* Action Buttons - ثابتة دائماً */}
+        {/* Action Buttons */}
         <div className="flex items-center justify-center gap-2 mt-3 pt-2 border-t border-border/50">
-          {/* Wishlist Button */}
           <div className="relative">
             <Button
               size="icon"
@@ -263,7 +392,6 @@ export function ProductCard({ product, className }: ProductCardProps) {
               <span className="sr-only">إضافة للمفضلة</span>
             </Button>
             
-            {/* Floating hearts */}
             {floatingHearts.map((id, index) => (
               <Heart
                 key={id}
@@ -280,7 +408,6 @@ export function ProductCard({ product, className }: ProductCardProps) {
             ))}
           </div>
           
-          {/* Add to Cart Button */}
           <Button
             size="icon"
             variant="ghost"
@@ -295,23 +422,21 @@ export function ProductCard({ product, className }: ProductCardProps) {
             <span className="sr-only">إضافة للسلة</span>
           </Button>
           
-          {/* Quick View Button */}
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 rounded-full hover:bg-primary/10 transition-all"
-               onClick={(e) => {
-                 e.preventDefault()
-                 e.stopPropagation()
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 rounded-full hover:bg-primary/10 transition-all"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
               window.location.href = `/product/${product.id}`
-               }}
-              >
-               <Eye className="h-4 w-4" />
-               <span className="sr-only">عرض سريع</span>
-            </Button>
+            }}
+          >
+            <Eye className="h-4 w-4" />
+            <span className="sr-only">عرض سريع</span>
+          </Button>
         </div>
 
-        {/* Colors */}
         {product.colors && product.colors.length > 0 && (
           <div className="flex items-center gap-1 mt-2">
             <span className="text-xs text-muted-foreground">

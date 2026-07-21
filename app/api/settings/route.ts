@@ -1,18 +1,21 @@
 import { NextResponse } from 'next/server';
-import { getConnection } from '@/lib/db';
+import { getSettings, updateSettings } from '@/lib/db';
 
 // GET - جلب الإعدادات
 export async function GET() {
   try {
-    const connection = await getConnection();
-    const [rows] = await connection.execute('SELECT * FROM settings WHERE id = 1');
+    const settings = await getSettings();
     
-    const settings = rows as any[];
-    if (settings.length === 0) {
-      return NextResponse.json({});
+    if (!settings) {
+      // ❌ خطأ: ما منرجع قيم افتراضية ثابتة
+      // ✅ الحل: نرجع error أو ننشئ إعدادات جديدة في DB
+      return NextResponse.json(
+        { error: 'الإعدادات غير موجودة في قاعدة البيانات' },
+        { status: 404 }
+      );
     }
     
-    return NextResponse.json(settings[0]);
+    return NextResponse.json(settings);
   } catch (error) {
     console.error('Error fetching settings:', error);
     return NextResponse.json(
@@ -26,30 +29,40 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const connection = await getConnection();
     
-    await connection.execute(
-      `UPDATE settings SET 
-        store_name = ?, store_name_en = ?, currency = ?, exchange_rate = ?,
-        free_shipping_threshold = ?, shipping_cost = ?, contact_email = ?,
-        contact_phone = ?, whatsapp_number = ?, instagram_url = ?,
-        facebook_url = ?, whatsapp_url = ?, hero_title = ?,
-        hero_subtitle = ?, announcement = ?, announcement_active = ?
-       WHERE id = 1`,
-      [
-        body.store_name, body.store_name_en, body.currency, body.exchange_rate,
-        body.free_shipping_threshold, body.shipping_cost, body.contact_email,
-        body.contact_phone, body.whatsapp_number, body.instagram_url,
-        body.facebook_url, body.whatsapp_url, body.hero_title,
-        body.hero_subtitle, body.announcement, body.announcement_active
-      ]
-    );
+    // ✅ نستخدم القيم اللي يبعتها المدير (من admin/settings)
+    // وما منحدد أي أرقام ثابتة
     
-    return NextResponse.json({ success: true });
+    await updateSettings({
+      storeName: body.storeName || body.store_name,
+      storeNameEn: body.storeNameEn || body.store_name_en,
+      currency: body.currency,
+      exchangeRate: body.exchangeRate || body.exchange_rate, // من المدير
+      freeShippingThreshold: body.freeShippingThreshold || body.free_shipping_threshold,
+      shippingCost: body.shippingCost || body.shipping_cost,
+      contactEmail: body.contactEmail || body.contact_email,
+      contactPhone: body.contactPhone || body.contact_phone,
+      whatsappNumber: body.whatsappNumber || body.whatsapp_number,
+      instagramUrl: body.instagramUrl || body.instagram_url,
+      facebookUrl: body.facebookUrl || body.facebook_url,
+      whatsappUrl: body.whatsappUrl || body.whatsapp_url,
+      heroTitle: body.heroTitle || body.hero_title,
+      heroSubtitle: body.heroSubtitle || body.hero_subtitle,
+      announcement: body.announcement,
+      announcementActive: body.announcementActive ?? body.announcement_active ?? false,
+    });
+    
+    const updatedSettings = await getSettings();
+    
+    return NextResponse.json({ 
+      success: true, 
+      settings: updatedSettings 
+    });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'حدث خطأ غير معروف';
     console.error('Error updating settings:', error);
     return NextResponse.json(
-      { error: 'حدث خطأ في تحديث الإعدادات' },
+      { error: 'حدث خطأ في تحديث الإعدادات: ' + errorMessage },
       { status: 500 }
     );
   }

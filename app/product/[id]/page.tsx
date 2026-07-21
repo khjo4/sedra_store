@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, useParams } from 'next/navigation'
-import { Heart, ShoppingBag, Minus, Plus, Star, ChevronLeft, Truck, RefreshCw, Shield } from 'lucide-react'
+import { Heart, ShoppingBag, Minus, Plus, Star, ChevronLeft, Truck, Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -12,17 +12,37 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { ProductCard } from '@/components/product-card'
-import { 
-  addToCart, 
-  addToWishlist, 
-  removeFromWishlist, 
-  isInWishlist, 
-  formatPrice, 
-  getCurrency 
-} from '@/lib/store'
-import { cn } from '@/lib/utils'
+import { cn, formatPrice, fetchExchangeRate } from '@/lib/utils'
 import type { Product, Currency } from '@/lib/types'
 import { toast } from 'sonner'
+
+// ================================================
+// دوال السلة والمفضلة (مؤقتاً)
+// ================================================
+const CART_KEY = 'sedra_cart'
+const WISHLIST_KEY = 'sedra_wishlist'
+
+const getCart = () => {
+  if (typeof window === 'undefined') return []
+  const cart = localStorage.getItem(CART_KEY)
+  return cart ? JSON.parse(cart) : []
+}
+
+const saveCart = (cart: any[]) => {
+  localStorage.setItem(CART_KEY, JSON.stringify(cart))
+  window.dispatchEvent(new Event('cartUpdated'))
+}
+
+const getWishlist = (): string[] => {
+  if (typeof window === 'undefined') return []
+  const wishlist = localStorage.getItem(WISHLIST_KEY)
+  return wishlist ? JSON.parse(wishlist) : []
+}
+
+const saveWishlist = (wishlist: string[]) => {
+  localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist))
+  window.dispatchEvent(new Event('wishlistUpdated'))
+}
 
 export default function ProductPage() {
   const router = useRouter()
@@ -33,14 +53,21 @@ export default function ProductPage() {
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [currency, setCurrency] = useState<Currency>('USD')
+  const [exchangeRate, setExchangeRate] = useState(14500)
   const [selectedImage, setSelectedImage] = useState(0)
   const [selectedColor, setSelectedColor] = useState<string>('')
   const [selectedSize, setSelectedSize] = useState<string>('')
   const [quantity, setQuantity] = useState(1)
   const [isWishlisted, setIsWishlisted] = useState(false)
   const [imageError, setImageError] = useState(false)
+  
+  // حالات للأسعار المنسقة
+  const [formattedPrice, setFormattedPrice] = useState('')
+  const [formattedOriginalPrice, setFormattedOriginalPrice] = useState('')
 
+  // ================================================
   // جلب المنتج من API
+  // ================================================
   useEffect(() => {
     async function fetchProduct() {
       try {
@@ -50,7 +77,6 @@ export default function ProductPage() {
         }
         const data = await response.json()
         
-        // التأكد من أن المصفوفات موجودة
         const safeProduct = {
           ...data,
           images: Array.isArray(data.images) ? data.images : [],
@@ -63,7 +89,10 @@ export default function ProductPage() {
         setProduct(safeProduct)
         setSelectedColor(safeProduct.colors?.[0] || '')
         setSelectedSize(safeProduct.sizes?.[0] || '')
-        setIsWishlisted(isInWishlist(safeProduct.id))
+        
+        // التحقق من وجود المنتج في المفضلة
+        const wishlist = getWishlist()
+        setIsWishlisted(wishlist.includes(safeProduct.id))
       } catch (error) {
         console.error('Error fetching product:', error)
         setProduct(null)
@@ -73,50 +102,179 @@ export default function ProductPage() {
     }
     
     fetchProduct()
-    setCurrency(getCurrency())
-
-    const handleCurrencyChange = () => setCurrency(getCurrency())
-    window.addEventListener('currencyChanged', handleCurrencyChange)
-    return () => window.removeEventListener('currencyChanged', handleCurrencyChange)
   }, [id])
 
-  // جلب المنتجات المشابهة
+  // ================================================
+  // تحميل العملة وسعر الصرف
+  // ================================================
+  useEffect(() => {
+    const loadCurrency = async () => {
+      const savedCurrency = localStorage.getItem('sedra_currency')
+      const currentCurrency = (savedCurrency === 'SYP' ? 'SYP' : 'USD') as Currency
+      setCurrency(currentCurrency)
+      
+      const rate = await fetchExchangeRate()
+      setExchangeRate(rate)
+    }
+    
+    loadCurrency()
+    
+    const handleCurrencyChange = () => {
+      loadCurrency()
+    }
+    
+    window.addEventListener('currencyChanged', handleCurrencyChange)
+    return () => window.removeEventListener('currencyChanged', handleCurrencyChange)
+  }, [])
+
+  // ================================================
+  // تحديث الأسعار عند تغير المنتج أو العملة
+  // ================================================
+  useEffect(() => {
+    if (!product) return
+    
+    const updatePrices = () => {
+      const priceFormatted = formatPrice(product.price, currency, exchangeRate)
+      setFormattedPrice(priceFormatted)
+      
+      if (product.originalPrice) {
+        const originalFormatted = formatPrice(product.originalPrice, currency, exchangeRate)
+        setFormattedOriginalPrice(originalFormatted)
+      }
+    }
+    
+    updatePrices()
+  }, [product, currency, exchangeRate])
+
+  // ================================================
+  // جلب المنتجات المشابهة (محسّن)
+  // ================================================
   useEffect(() => {
     async function fetchRelatedProducts() {
       if (!product) return
       
       try {
-        const response = await fetch('/api/products')
-        const allProducts = await response.json()
+        // ✅ تحسين الأداء: جلب المنتجات من نفس القسم فقط
+        const response = await fetch(`/api/products?category=${product.category}&limit=5`)
+        const data = await response.json()
+        const allProducts = Array.isArray(data) ? data : data.products || []
         const related = allProducts
-          .filter((p: Product) => p.category === product.category && p.id !== product.id)
+          .filter((p: Product) => p.id !== product.id)
           .slice(0, 4)
         setRelatedProducts(related)
       } catch (error) {
         console.error('Error fetching related products:', error)
+        // Fallback: جلب منتجات عشوائية
+        try {
+          const fallbackResponse = await fetch('/api/products?limit=4')
+          const fallbackData = await fallbackResponse.json()
+          const fallbackProducts = Array.isArray(fallbackData) ? fallbackData : fallbackData.products || []
+          setRelatedProducts(fallbackProducts.filter((p: Product) => p.id !== product.id))
+        } catch (fallbackError) {
+          console.error('Fallback failed:', fallbackError)
+        }
       }
     }
     
     fetchRelatedProducts()
   }, [product])
 
-  // Helper function to get category name in Arabic
   const getCategoryName = (category: string) => {
     const categoryMap: Record<string, string> = {
-      dresses: 'فساتين',
-      blouses: 'بلوزات',
-      skirts: 'تنانير',
-      pants: 'بناطيل',
-      abayas: 'عبايات',
       accessories: 'اكسسوارات',
       perfumes: 'عطورات',
       makeup: 'مكياج',
+      cup: 'أكواب',
+      care: 'العناية والاهتمام',
       'gift-sets': 'مجموعات الهدايا',
     }
     return categoryMap[category] || category
   }
 
-  // عرض شاشة تحميل
+  const handleAddToCart = () => {
+    if (product?.sizes && product.sizes.length > 0 && !selectedSize) {
+      toast.error('الرجاء اختيار المقاس')
+      return
+    }
+
+    const cart = getCart()
+    const existingIndex = cart.findIndex(
+      (item: any) => item.productId === product?.id && 
+                     item.selectedColor === selectedColor && 
+                     item.selectedSize === selectedSize
+    )
+    
+    if (existingIndex > -1) {
+      cart[existingIndex].quantity += quantity
+    } else {
+      cart.push({
+        productId: product?.id,
+        quantity,
+        selectedColor,
+        selectedSize,
+      })
+    }
+    
+    saveCart(cart)
+    
+    toast.success('تمت الإضافة إلى السلة', {
+      description: `${product?.name} (${quantity})`,
+      action: {
+        label: 'عرض السلة',
+        onClick: () => router.push('/cart'),
+      },
+    })
+  }
+
+  const handleWishlist = async () => {
+    if (!product) return
+    
+    const customerEmail = localStorage.getItem('user_email') || 'guest@sedra.com'
+    
+    if (isWishlisted) {
+      try {
+        const response = await fetch(`/api/wishlist?email=${customerEmail}&productId=${product.id}`, {
+          method: 'DELETE',
+        })
+        
+        if (!response.ok) throw new Error('Failed to remove')
+        
+        setIsWishlisted(false)
+        toast.info('تمت الإزالة من المفضلة')
+      } catch (error) {
+        console.error('Error removing from wishlist:', error)
+        toast.error('حدث خطأ في إزالة المنتج من المفضلة')
+      }
+    } else {
+      try {
+        const response = await fetch('/api/wishlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customerEmail: customerEmail,
+            productId: product.id,
+          }),
+        })
+        
+        if (!response.ok) throw new Error('Failed to add')
+        
+        setIsWishlisted(true)
+        toast.success('تمت الإضافة إلى المفضلة')
+      } catch (error) {
+        console.error('Error adding to wishlist:', error)
+        toast.error('حدث خطأ في إضافة المنتج للمفضلة')
+      }
+    }
+    
+    window.dispatchEvent(new Event('wishlistUpdated'))
+  }
+
+  const discount = product?.originalPrice
+    ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+    : 0
+
+  const placeholderImage = `https://placehold.co/600x800/f5f0eb/d4a574?text=${encodeURIComponent(product?.name?.slice(0, 10) || 'Product')}`
+
   if (loading) {
     return (
       <>
@@ -145,49 +303,6 @@ export default function ProductPage() {
       </>
     )
   }
-
-  const handleAddToCart = () => {
-    if (product.sizes && product.sizes.length > 0 && !selectedSize) {
-      toast.error('الرجاء اختيار المقاس')
-      return
-    }
-
-    addToCart({
-      productId: product.id,
-      quantity,
-      selectedColor,
-      selectedSize,
-    })
-    
-    toast.success('تمت الإضافة إلى السلة', {
-      description: `${product.name} (${quantity})`,
-      action: {
-        label: 'عرض السلة',
-        onClick: () => router.push('/cart'),
-      },
-    })
-    
-    window.dispatchEvent(new Event('cartUpdated'))
-  }
-
-  const handleWishlist = () => {
-    if (isWishlisted) {
-      removeFromWishlist(product.id)
-      setIsWishlisted(false)
-      toast.info('تمت الإزالة من المفضلة')
-    } else {
-      addToWishlist(product.id)
-      setIsWishlisted(true)
-      toast.success('تمت الإضافة إلى المفضلة')
-    }
-    window.dispatchEvent(new Event('wishlistUpdated'))
-  }
-
-  const discount = product.originalPrice
-    ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
-    : 0
-
-  const placeholderImage = `https://placehold.co/600x800/f5f0eb/d4a574?text=${encodeURIComponent(product.name.slice(0, 10))}`
 
   return (
     <>
@@ -220,7 +335,6 @@ export default function ProductPage() {
                   priority
                   onError={() => setImageError(true)}
                 />
-                
                 {/* Badges */}
                 <div className="absolute top-4 right-4 flex flex-col gap-2">
                   {discount > 0 && (
@@ -236,6 +350,16 @@ export default function ProductPage() {
                   )}
                 </div>
               </div>
+              {/* ✅ حالة المخزون - هنا مكانها المناسب */}
+            <div className="mt-4">
+              {product.stock > 10 ? (
+                <p className="text-green-600 text-sm">متوفر ({product.stock} قطعة)</p>
+              ) : product.stock > 0 ? (
+                <p className="text-orange-500 text-sm"> كمية محدودة - متبقي {product.stock} قطعة فقط</p>
+              ) : (
+                <p className="text-red-500 text-sm"> نفذت الكمية - سيتوفر قريباً</p>
+              )}
+            </div>
 
               {/* Thumbnails */}
               {product.images && product.images.length > 1 && (
@@ -275,35 +399,15 @@ export default function ProductPage() {
                 <p className="text-sm text-muted-foreground">{product.nameEn}</p>
               </div>
 
-              {/* Rating */}
-              <div className="flex items-center gap-3">
-                <div className="flex items-center">
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      className={cn(
-                        'h-5 w-5',
-                        i < Math.floor(product.rating || 0)
-                          ? 'fill-accent text-accent'
-                          : 'fill-muted text-muted'
-                      )}
-                    />
-                  ))}
-                </div>
-                <span className="text-sm text-muted-foreground">
-                  {product.rating || 0} ({product.reviewCount || 0} تقييم)
-                </span>
-              </div>
-
               {/* Price */}
               <div className="flex items-baseline gap-3">
                 <span className="text-3xl font-bold text-primary">
-                  {formatPrice(product.price, currency)}
+                  {formattedPrice}
                 </span>
                 {product.originalPrice && (
                   <>
-                    <span className="text-xl text-muted-foreground line-through">
-                      {formatPrice(product.originalPrice, currency)}
+                    <span className="text-xl text-muted-foreground line-through leading-normal">
+                      {formattedOriginalPrice}
                     </span>
                     <Badge className="bg-destructive text-destructive-foreground">
                       وفري {discount}%
@@ -313,29 +417,6 @@ export default function ProductPage() {
               </div>
 
               <Separator />
-
-              {/* Colors */}
-              {product.colors && product.colors.length > 0 && (
-                <div>
-                  <p className="font-medium mb-3">اللون: {selectedColor}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {product.colors.map((color: string) => (
-                      <button
-                        key={color}
-                        onClick={() => setSelectedColor(color)}
-                        className={cn(
-                          'px-4 py-2 rounded-lg border-2 transition-colors text-sm',
-                          selectedColor === color
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border hover:border-primary/50'
-                        )}
-                      >
-                        {color}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Sizes */}
               {product.sizes && product.sizes.length > 0 && (
@@ -421,8 +502,8 @@ export default function ProductPage() {
                   <p className="text-xs">شحن سريع</p>
                 </div>
                 <div className="text-center p-3 rounded-lg bg-secondary/50">
-                  <RefreshCw className="h-6 w-6 mx-auto mb-2 text-primary" />
-                  <p className="text-xs">استبدال مجاني</p>
+                  <Star className="h-6 w-6 mx-auto mb-2 text-primary" />
+                  <p className="text-xs"> بضاعة مميزة</p>
                 </div>
                 <div className="text-center p-3 rounded-lg bg-secondary/50">
                   <Shield className="h-6 w-6 mx-auto mb-2 text-primary" />
@@ -460,9 +541,8 @@ export default function ProductPage() {
                 <TabsContent value="shipping" className="mt-4">
                   <ul className="space-y-2 text-sm text-muted-foreground">
                     <li>التوصيل خلال 3-5 أيام عمل</li>
-                    <li>شحن مجاني للطلبات فوق 100$</li>
+                    <li>شحن مجاني للطلبات فوق 70$</li>
                     <li>الدفع عند الاستلام متاح</li>
-                    <li>استبدال مجاني خلال 14 يوم</li>
                   </ul>
                 </TabsContent>
               </Tabs>

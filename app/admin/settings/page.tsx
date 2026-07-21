@@ -1,7 +1,7 @@
+
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getSettings, updateSettings } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -24,83 +24,105 @@ import {
   Mail, 
   Save,
   RefreshCw,
-   Globe,
+  Globe,
   Instagram,
   Facebook
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { SiteSettings } from '@/lib/types'
 
+// ✅ القيم الافتراضية (تأكدي من وجود جميع الحقول)
+const defaultFormData: SiteSettings = {
+  storeName: '',
+  storeNameEn: '',
+  currency: 'USD',
+  exchangeRate: 14500,
+  freeShippingThreshold: 100,
+  shippingCost: 5,
+  contactEmail: '',
+  contactPhone: '',
+  instagramUrl: '',
+  facebookUrl: '',
+  whatsappUrl: '',
+  heroTitle: '',
+  heroSubtitle: '',
+  announcement: '',
+  announcementActive: false,
+}
+
 export default function AdminSettingsPage() {
-  const [settings, setSettings] = useState<SiteSettings | null>(null)
-  const [formData, setFormData] = useState<SiteSettings | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [initialSettings, setInitialSettings] = useState<SiteSettings | null>(null)
+  const [formData, setFormData] = useState<SiteSettings>(defaultFormData)
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
-    const currentSettings = getSettings()
-    setSettings(currentSettings)
-    setFormData(currentSettings)
+    const loadSettings = async () => {
+      setIsLoading(true)
+      try {
+        const response = await fetch('/api/settings', { cache: 'no-store' })
+        const data = await response.json()
+        setInitialSettings(data)
+        setFormData(prev => ({ ...prev, ...data }))
+      } catch (error) {
+        console.error('Error fetching settings:', error)
+        toast.error('حدث خطأ في جلب الإعدادات')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadSettings()
   }, [])
 
   const handleSave = async () => {
-  if (!formData) return
-  setIsSaving(true)
+    setIsSaving(true)
+    try {
+      const payload = {
+        store_name: formData.storeName,
+        store_name_en: formData.storeNameEn,
+        currency: formData.currency,
+        exchange_rate: formData.exchangeRate,
+        free_shipping_threshold: formData.freeShippingThreshold,
+        shipping_cost: formData.shippingCost,
+        contact_email: formData.contactEmail,
+        contact_phone: formData.contactPhone,
+        instagram_url: formData.instagramUrl || '',
+        facebook_url: formData.facebookUrl || '',
+        whatsapp_url: formData.whatsappUrl || '',
+        hero_title: formData.heroTitle,
+        hero_subtitle: formData.heroSubtitle,
+        announcement: formData.announcement || '',
+        announcement_active: formData.announcementActive,
+      }
 
-  try {
-    // تحضير البيانات للإرسال
-    const payload = {
-      store_name: formData.storeName,
-      store_name_en: formData.storeNameEn,
-      currency: formData.currency,
-      exchange_rate: formData.exchangeRate,
-      free_shipping_threshold: formData.freeShippingThreshold,
-      shipping_cost: formData.shippingCost,
-      contact_email: formData.contactEmail,
-      contact_phone: formData.contactPhone,
-      whatsapp_number: formData.whatsappUrl || '',
-      instagram_url: formData.instagramUrl || '',
-      facebook_url: formData.facebookUrl || '',
-      whatsapp_url: formData.whatsappUrl || '',
-      hero_title: formData.heroTitle,
-      hero_subtitle: formData.heroSubtitle,
-      announcement: formData.announcement || '',
-      announcement_active: formData.announcementActive,
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) throw new Error('فشل في حفظ الإعدادات')
+
+      setInitialSettings(formData)
+      toast.success('تم حفظ الإعدادات بنجاح')
+    } catch (error) {
+      console.error('Error saving settings:', error)
+      toast.error('حدث خطأ في حفظ الإعدادات')
+    } finally {
+      setIsSaving(false)
     }
-
-    console.log('📤 Sending to API:', payload) // للتأكد من البيانات
-
-    const response = await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-
-    if (!response.ok) {
-      throw new Error('فشل في حفظ الإعدادات')
-    }
-
-    // تحديث localStorage أيضاً
-    updateSettings(formData)
-    setSettings(formData)
-
-    toast.success('تم حفظ الإعدادات بنجاح')
-  } catch (error) {
-    console.error('Error saving settings:', error)
-    toast.error('حدث خطأ في حفظ الإعدادات')
-  } finally {
-    setIsSaving(false)
   }
-}
 
   const handleReset = () => {
-    if (!settings) return
-    setFormData(settings)
-    toast.info('تم استعادة الإعدادات الأصلية')
+    if (initialSettings) {
+      setFormData(initialSettings)
+      toast.info('تم استعادة الإعدادات المحفوظة')
+    }
   }
 
-  if (!formData) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-100">
+      <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     )
@@ -123,8 +145,7 @@ export default function AdminSettingsPage() {
             {isSaving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
           </Button>
         </div>
-      </div>
-
+      </div>      
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Store Info */}
         <Card>
@@ -286,43 +307,43 @@ export default function AdminSettingsPage() {
         </Card>
 
         {/* Contact Info */}
-       {/* Contact Info */}
-<Card>
-  <CardHeader>
-    <CardTitle className="flex items-center gap-2">
-      <Phone className="h-5 w-5" />
-      معلومات التواصل
-    </CardTitle>
-  </CardHeader>
-  <CardContent className="space-y-4">
-    <div>
-      <Label htmlFor="contactEmail" className="mb-2 block">البريد الإلكتروني</Label>
-      <Input
-        id="contactEmail"
-        type="email"
-        value={formData.contactEmail}
-        onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
-      />
-    </div>
-    <div>
-      <Label htmlFor="contactPhone" className="mb-2 block">رقم الهاتف</Label>
-      <Input
-        id="contactPhone"
-        value={formData.contactPhone}
-        onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-      />
-    </div>
-    <div>
-      <Label htmlFor="whatsappUrl" className="mb-2 block">رابط واتساب</Label>
-      <Input
-        id="whatsappUrl"
-        value={formData.whatsappUrl || ''}
-        onChange={(e) => setFormData({ ...formData, whatsappUrl: e.target.value })}
-        placeholder="https://wa.me/..."
-      />
-    </div>
-  </CardContent>
-</Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Phone className="h-5 w-5" />
+              معلومات التواصل
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="contactEmail" className="mb-2 block">البريد الإلكتروني</Label>
+              <Input
+                id="contactEmail"
+                type="email"
+                value={formData.contactEmail}
+                onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="contactPhone" className="mb-2 block">رقم الهاتف</Label>
+              <Input
+                id="contactPhone"
+                value={formData.contactPhone}
+                onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="whatsappUrl" className="mb-2 block">رابط واتساب</Label>
+              <Input
+                id="whatsappUrl"
+                value={formData.whatsappUrl || ''}
+                onChange={(e) => setFormData({ ...formData, whatsappUrl: e.target.value })}
+                placeholder="https://wa.me/..."
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Social Media */}
         <Card>
           <CardHeader>

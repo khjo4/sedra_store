@@ -23,10 +23,9 @@ const categories = [
   { value: 'accessories', label: 'اكسسوارات' },
   { value: 'perfumes', label: 'عطورات' },
   { value: 'makeup', label: 'مكياج' },
+  { value: 'cup', label: 'أكواب' },
+  { value: 'care', label: 'العناية والاهتمام' },
   { value: 'gift-sets', label: 'مجموعات الهدايا' },
-  { value: 'dresses', label: 'فساتين' },
-  { value: 'blouses', label: 'بلوزات' },
-  { value: 'skirts', label: 'تنانير' },
 ]
 
 export default function AdminEditProductPage() {

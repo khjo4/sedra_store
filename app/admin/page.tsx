@@ -17,8 +17,13 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { getAdminStats, getOrders, getProducts, formatPrice, getCurrency } from '@/lib/store'
+import { formatPrice, fetchExchangeRate } from '@/lib/utils'
 import type { Order, Product, Currency } from '@/lib/types'
+
+// ================================================
+// تم إزالة getCurrencyLocal و formatPriceLocal
+// الآن نستخدم formatPrice من lib/utils
+// ================================================
 
 export default function AdminDashboard() {
   const router = useRouter()
@@ -36,6 +41,100 @@ export default function AdminDashboard() {
   const [recentOrders, setRecentOrders] = useState<Order[]>([])
   const [lowStockItems, setLowStockItems] = useState<Product[]>([])
   const [currency, setCurrency] = useState<Currency>('USD')
+  const [exchangeRate, setExchangeRate] = useState(14500)
+  
+  // حالات للأسعار المنسقة
+  const [formattedTotalRevenue, setFormattedTotalRevenue] = useState('')
+  const [formattedOrderTotals, setFormattedOrderTotals] = useState<Record<string, string>>({})
+
+  // جلب البيانات من API
+ // جلب البيانات من API
+const fetchStats = async () => {
+  try {
+    const [ordersRes, productsRes] = await Promise.all([
+      fetch('/api/orders'),
+      fetch('/api/products')
+    ])
+    
+    let orders: Order[] = []
+    let products: Product[] = []
+    
+    // ✅ معالجة بيانات الطلبات
+    const ordersData = await ordersRes.json()
+    orders = Array.isArray(ordersData) ? ordersData : ordersData.orders || []
+    
+    // ✅ معالجة بيانات المنتجات
+    const productsData = await productsRes.json()
+    products = Array.isArray(productsData) ? productsData : productsData.products || []
+    
+    const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0)
+    const pendingOrders = orders.filter(o => o.status === 'pending').length
+    const completedOrders = orders.filter(o => o.status === 'delivered').length
+    
+    // جلب العملاء
+    let totalCustomers = 0
+    try {
+      const customersRes = await fetch('/api/customers')
+      const customersData = await customersRes.json()
+      const customers = Array.isArray(customersData) ? customersData : customersData.customers || []
+      totalCustomers = customers.length
+    } catch {
+      totalCustomers = 0
+    }
+    
+    setStats({
+      totalRevenue,
+      totalOrders: orders.length,
+      pendingOrders,
+      completedOrders,
+      totalCustomers,
+      totalProducts: products.length,
+      lowStockProducts: products.filter(p => p.stock < 10).length,
+    })
+    
+    setRecentOrders(orders.slice(0, 5))
+    setLowStockItems(products.filter(p => p.stock < 10).slice(0, 5))
+  } catch (error) {
+    console.error('Error fetching admin stats:', error)
+  }
+}
+
+  // تحميل العملة وسعر الصرف
+  useEffect(() => {
+    const loadCurrency = async () => {
+      const savedCurrency = localStorage.getItem('sedra_currency')
+      const currentCurrency = (savedCurrency === 'SYP' ? 'SYP' : 'USD') as Currency
+      setCurrency(currentCurrency)
+      
+      const rate = await fetchExchangeRate()
+      setExchangeRate(rate)
+    }
+    
+    loadCurrency()
+    
+    const handleCurrencyChange = () => {
+      loadCurrency()
+    }
+    window.addEventListener('currencyChanged', handleCurrencyChange)
+    return () => window.removeEventListener('currencyChanged', handleCurrencyChange)
+  }, [])
+
+
+  
+  // تحديث الإيرادات المنسقة عند تغير العملة أو سعر الصرف
+  useEffect(() => {
+    if (stats.totalRevenue > 0) {
+      const revenueFormatted = formatPrice(stats.totalRevenue, currency, exchangeRate)
+      setFormattedTotalRevenue(revenueFormatted)
+    }
+    
+    // تحديث أسعار الطلبات
+    const updatedOrderTotals: Record<string, string> = {}
+    recentOrders.forEach(order => {
+      updatedOrderTotals[order.id] = formatPrice(order.total, currency, exchangeRate)
+    })
+    setFormattedOrderTotals(updatedOrderTotals)
+  }, [currency, exchangeRate, stats.totalRevenue, recentOrders])
 
   // Check authentication
   useEffect(() => {
@@ -51,20 +150,18 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!isAuthenticated) return
     
-    setStats(getAdminStats())
-    setRecentOrders(getOrders().slice(0, 5))
-    setLowStockItems(getProducts().filter(p => p.stock < 10).slice(0, 5))
-    setCurrency(getCurrency())
-
-    const handleCurrencyChange = () => setCurrency(getCurrency())
-    window.addEventListener('currencyChanged', handleCurrencyChange)
-    return () => window.removeEventListener('currencyChanged', handleCurrencyChange)
-  }, [isAuthenticated])
+    fetchStats()
+  }, [isAuthenticated, currency, exchangeRate])
 
   const handleLogout = () => {
     localStorage.removeItem('admin_token')
-    router.push('/admin/login')
-  }
+  
+  // ✅ نشر حدث لتحديث جميع المكونات
+  window.dispatchEvent(new Event('storage'))
+  window.dispatchEvent(new Event('adminLogout'))
+  
+  router.push('/')
+}
 
   if (loading) {
     return (
@@ -81,7 +178,7 @@ export default function AdminDashboard() {
   const statCards = [
     {
       title: 'إجمالي الإيرادات',
-      value: formatPrice(stats.totalRevenue, currency),
+      value: formattedTotalRevenue || formatPrice(stats.totalRevenue, currency, exchangeRate),
       icon: DollarSign,
       change: '+12%',
       positive: true,
@@ -141,7 +238,7 @@ export default function AdminDashboard() {
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                {stat.title}pwd
+                {stat.title}
               </CardTitle>
               <stat.icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -193,13 +290,13 @@ export default function AdminDashboard() {
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                         <Clock className="h-3 w-3" />
-                        {new Date(order.createdAt).toLocaleDateString('ar-SY')}
+                        {order.createdAt ? new Date(order.createdAt).toLocaleDateString('ar-SY') : 'تاريخ غير محدد'}
                         <span>|</span>
                         <span className="font-mono">{order.id}</span>
                       </div>
                     </div>
                     <span className="font-bold text-primary">
-                      {formatPrice(order.total, currency)}
+                      {formattedOrderTotals[order.id] || formatPrice(order.total, currency, exchangeRate)}
                     </span>
                   </div>
                 ))}

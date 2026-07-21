@@ -34,17 +34,47 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatPrice, getCurrency } from '@/lib/store'
+import { formatPrice, fetchExchangeRate } from '@/lib/utils'
 import type { Product, Currency } from '@/lib/types'
 import { toast } from 'sonner'
+
+// ================================================
+// تم إزالة getCurrencyLocal و formatPriceLocal
+// الآن نستخدم formatPrice من lib/utils
+// ================================================
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
   const [currency, setCurrency] = useState<Currency>('USD')
+  const [exchangeRate, setExchangeRate] = useState(14500)
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [loading, setLoading] = useState(true)
+  
+  // حالات للأسعار المنسقة
+  const [formattedPrices, setFormattedPrices] = useState<Record<string, string>>({})
+  const [formattedOriginalPrices, setFormattedOriginalPrices] = useState<Record<string, string>>({})
+
+  // تحميل العملة وسعر الصرف
+  useEffect(() => {
+    const loadCurrency = async () => {
+      const savedCurrency = localStorage.getItem('sedra_currency')
+      const currentCurrency = (savedCurrency === 'SYP' ? 'SYP' : 'USD') as Currency
+      setCurrency(currentCurrency)
+      
+      const rate = await fetchExchangeRate()
+      setExchangeRate(rate)
+    }
+    
+    loadCurrency()
+    
+    const handleCurrencyChange = () => {
+      loadCurrency()
+    }
+    window.addEventListener('currencyChanged', handleCurrencyChange)
+    return () => window.removeEventListener('currencyChanged', handleCurrencyChange)
+  }, [])
 
   // جلب المنتجات من API
   const loadProducts = async () => {
@@ -52,7 +82,8 @@ export default function AdminProductsPage() {
     try {
       const response = await fetch('/api/products')
       const data = await response.json()
-      setProducts(data)
+      const productsData = Array.isArray(data) ? data : data.products || []
+      setProducts(productsData)
     } catch (error) {
       console.error('Error fetching products:', error)
       toast.error('حدث خطأ في جلب المنتجات')
@@ -60,6 +91,26 @@ export default function AdminProductsPage() {
       setLoading(false)
     }
   }
+
+  // تحديث الأسعار المنسقة عند تغير المنتجات أو العملة أو سعر الصرف
+  useEffect(() => {
+    const updatePrices = () => {
+      const prices: Record<string, string> = {}
+      const originalPrices: Record<string, string> = {}
+      
+      products.forEach(product => {
+        prices[product.id] = formatPrice(product.price, currency, exchangeRate)
+        if (product.originalPrice) {
+          originalPrices[product.id] = formatPrice(product.originalPrice, currency, exchangeRate)
+        }
+      })
+      
+      setFormattedPrices(prices)
+      setFormattedOriginalPrices(originalPrices)
+    }
+    
+    updatePrices()
+  }, [products, currency, exchangeRate])
 
   // حذف منتج
   const handleDelete = async (productId: string) => {
@@ -72,7 +123,7 @@ export default function AdminProductsPage() {
         throw new Error('Failed to delete')
       }
       
-      loadProducts() // إعادة تحميل القائمة
+      loadProducts()
       toast.success('تم حذف المنتج بنجاح')
     } catch (error) {
       console.error('Error deleting product:', error)
@@ -82,11 +133,6 @@ export default function AdminProductsPage() {
 
   useEffect(() => {
     loadProducts()
-    setCurrency(getCurrency())
-
-    const handleCurrencyChange = () => setCurrency(getCurrency())
-    window.addEventListener('currencyChanged', handleCurrencyChange)
-    return () => window.removeEventListener('currencyChanged', handleCurrencyChange)
   }, [])
 
   useEffect(() => {
@@ -97,8 +143,8 @@ export default function AdminProductsPage() {
       result = result.filter(
         (p) =>
           p.name.toLowerCase().includes(query) ||
-          p.nameEn?.toLowerCase().includes(query) ||
-          p.id.toLowerCase().includes(query)
+          (p.nameEn?.toLowerCase() || '').includes(query) ||
+          String(p.id).toLowerCase().includes(query)
       )
     }
 
@@ -124,7 +170,6 @@ export default function AdminProductsPage() {
     return categoryMap[slug] || slug
   }
 
-  // عرض شاشة تحميل
   if (loading) {
     return (
       <div className="space-y-6">
@@ -143,7 +188,6 @@ export default function AdminProductsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold mb-2">المنتجات</h1>
@@ -157,7 +201,6 @@ export default function AdminProductsPage() {
         </Button>
       </div>
 
-      {/* Filters */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row gap-4">
@@ -175,10 +218,11 @@ export default function AdminProductsPage() {
                 <SelectValue placeholder="كل الأقسام" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">كل الأقسام</SelectItem>
                 <SelectItem value="accessories">اكسسوارات</SelectItem>
                 <SelectItem value="perfumes">عطورات</SelectItem>
                 <SelectItem value="makeup">مكياج</SelectItem>
+                <SelectItem value="cup">أكواب</SelectItem>
+                <SelectItem value="care">العناية والاهتمام</SelectItem>
                 <SelectItem value="gift-sets">مجموعات الهدايا</SelectItem>
               </SelectContent>
             </Select>
@@ -186,7 +230,6 @@ export default function AdminProductsPage() {
         </CardContent>
       </Card>
 
-      {/* Products Table */}
       <Card>
         <CardHeader>
           <CardTitle>قائمة المنتجات</CardTitle>
@@ -196,19 +239,19 @@ export default function AdminProductsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>المنتج</TableHead>
-                  <TableHead>القسم</TableHead>
-                  <TableHead>السعر</TableHead>
-                  <TableHead>المخزون</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead className="text-left">إجراءات</TableHead>
+                  <TableHead className="text-right">المنتج</TableHead>
+                  <TableHead className="text-center">القسم</TableHead>
+                  <TableHead className="text-center">السعر</TableHead>
+                  <TableHead className="text-right">المخزون</TableHead>
+                  <TableHead className="text-right">الحالة</TableHead>
+                  <TableHead className="text-right">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredProducts.length > 0 ? (
                   filteredProducts.map((product) => (
                     <TableRow key={product.id}>
-                      <TableCell>
+                      <TableCell className="text-right">
                         <div className="flex items-center gap-3">
                           <div className="relative w-12 h-16 rounded-lg overflow-hidden bg-muted shrink-0">
                             <Image
@@ -228,13 +271,13 @@ export default function AdminProductsPage() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>{getCategoryName(product.category)}</TableCell>
-                      <TableCell>
+                      <TableCell className="text-center">{getCategoryName(product.category)}</TableCell>
+                      <TableCell className="text-center">
                         <div>
-                          <p className="font-medium">{formatPrice(product.price, currency)}</p>
+                          <p className="font-medium">{formattedPrices[product.id] || formatPrice(product.price, currency, exchangeRate)}</p>
                           {product.originalPrice && (
                             <p className="text-xs text-muted-foreground line-through">
-                              {formatPrice(product.originalPrice, currency)}
+                              {formattedOriginalPrices[product.id] || formatPrice(product.originalPrice, currency, exchangeRate)}
                             </p>
                           )}
                         </div>

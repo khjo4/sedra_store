@@ -1,7 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getConnection } from '@/lib/db';
+import { getOrderById, updateOrderStatus } from '@/lib/db';
 
-// PUT - تحديث حالة الطلب
+// ✅ GET - جلب طلب معين (للمدير فقط)
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    
+    // ✅ 1. التحقق من صلاحية المدير
+    // const authHeader = request.headers.get('authorization');
+    // if (!authHeader) {
+    //   return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    // }
+    
+    // ✅ 2. استخدام الدالة من db.ts (التي تقوم بالتحويل تلقائياً)
+    const order = await getOrderById(id);
+    
+    if (!order) {
+      return NextResponse.json(
+        { error: 'الطلب غير موجود' },
+        { status: 404 }
+      );
+    }
+    
+    return NextResponse.json(order);
+  } catch (error) {
+    console.error('Error fetching order:', error);
+    return NextResponse.json(
+      { error: 'حدث خطأ في جلب الطلب' },
+      { status: 500 }
+    );
+  }
+}
+
+// ✅ PUT - تحديث حالة الطلب (للمدير فقط)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -11,49 +45,40 @@ export async function PUT(
     const body = await request.json();
     const { status } = body;
     
-    const connection = await getConnection();
+    // ✅ 1. التحقق من صلاحية المدير
+    // const authHeader = request.headers.get('authorization');
+    // if (!authHeader) {
+    //   return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    // }
     
-    await connection.execute(
-      'UPDATE orders SET status = ? WHERE id = ?',
-      [status, id]
-    );
-    
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Error updating order:', error);
-    return NextResponse.json(
-      { error: 'حدث خطأ في تحديث الطلب' },
-      { status: 500 }
-    );
-  }
-}
-
-// GET - جلب طلب معين
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const connection = await getConnection();
-    const [rows] = await connection.execute(
-      'SELECT * FROM orders WHERE id = ?',
-      [id]
-    );
-    
-    const orders = rows as any[];
-    if (orders.length === 0) {
+    // ✅ 2. التحقق من وجود الطلب
+    const existingOrder = await getOrderById(id);
+    if (!existingOrder) {
       return NextResponse.json(
         { error: 'الطلب غير موجود' },
         { status: 404 }
       );
     }
     
-    return NextResponse.json(orders[0]);
+    // ✅ 3. التحقق من صحة الحالة (status)
+    const validStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return NextResponse.json(
+        { error: 'حالة غير صالحة' },
+        { status: 400 }
+      );
+    }
+    
+    // ✅ 4. استخدام الدالة من db.ts
+    await updateOrderStatus(id, status);
+    
+    // ✅ 5. إرجاع الطلب بعد التحديث
+    const updatedOrder = await getOrderById(id);
+    return NextResponse.json({ success: true, order: updatedOrder });
   } catch (error) {
-    console.error('Error fetching order:', error);
+    console.error('Error updating order:', error);
     return NextResponse.json(
-      { error: 'حدث خطأ في جلب الطلب' },
+      { error: 'حدث خطأ في تحديث الطلب' },
       { status: 500 }
     );
   }

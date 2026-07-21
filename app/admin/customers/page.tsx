@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getCustomers, getOrders, getSettings, formatPrice } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,28 +20,89 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Search, Eye, Mail, Phone, MapPin, ShoppingBag, Calendar } from "lucide-react"
-import type { Customer, Order, SiteSettings } from "@/lib/types"
+import type { Customer, Order, Currency } from "@/lib/types"
+import { toast } from "sonner"
+
+// دوال مساعدة محلية (بدلاً من store.ts)
+const CURRENCY_KEY = 'sedra_currency'
+
+const getCurrencyLocal = (): Currency => {
+  if (typeof window === 'undefined') return 'USD'
+  const savedCurrency = localStorage.getItem(CURRENCY_KEY)
+  return (savedCurrency === 'SYP' ? 'SYP' : 'USD') as Currency
+}
+
+const getSettingsLocal = () => {
+  return {
+    currency: getCurrencyLocal(),
+    exchangeRate: 14500,
+  }
+}
+
+const formatPriceLocal = (price: number | string, currency: Currency) => {
+  const numericPrice = typeof price === 'string' ? parseFloat(price) : price
+  if (isNaN(numericPrice)) return `$${0}`
+  
+  if (currency === 'SYP') {
+    const settings = getSettingsLocal()
+    return `${Math.round(numericPrice * settings.exchangeRate).toLocaleString('ar-SY')} ل.س`
+  }
+  return `$${numericPrice.toFixed(2)}`
+}
 
 export default function AdminCustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [orders, setOrders] = useState<Order[]>([])
-  const [settings, setSettings] = useState<SiteSettings | null>(null)
+  const [currency, setCurrency] = useState<Currency>('USD')
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [customerOrders, setCustomerOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
 
+  // جلب العملاء من API
+const fetchCustomers = async () => {
+  try {
+    const response = await fetch('/api/customers')
+    const data = await response.json()
+    const customersArray = Array.isArray(data) ? data : data.customers || []
+    setCustomers(customersArray)
+  } catch (error) {
+    console.error('Error fetching customers:', error)
+    toast.error('حدث خطأ في جلب العملاء')
+    setCustomers([])
+  }
+}
+
+// جلب الطلبات من API
+const fetchOrders = async () => {
+  try {
+    const response = await fetch('/api/orders')
+    const data = await response.json()
+    const ordersArray = Array.isArray(data) ? data : data.orders || []
+    setOrders(ordersArray)
+  } catch (error) {
+    console.error('Error fetching orders:', error)
+    toast.error('حدث خطأ في جلب الطلبات')
+    setOrders([])
+  }
+}
   useEffect(() => {
-    setCustomers(getCustomers())
-    setOrders(getOrders())
-    setSettings(getSettings())
+    Promise.all([fetchCustomers(), fetchOrders()]).finally(() => setLoading(false))
+    setCurrency(getCurrencyLocal())
+
+    const handleCurrencyChange = () => setCurrency(getCurrencyLocal())
+    window.addEventListener('currencyChanged', handleCurrencyChange)
+    return () => window.removeEventListener('currencyChanged', handleCurrencyChange)
   }, [])
 
-  const filteredCustomers = customers.filter(
-    (customer) =>
-      customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.phone.includes(searchQuery)
-  )
+  const filteredCustomers = Array.isArray(customers)
+  ? customers.filter(
+      (customer) =>
+        customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        customer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        customer.phone.includes(searchQuery)
+    )
+  : []
 
   const getCustomerOrders = (email: string) => {
     return orders.filter((order) => order.customerEmail === email)
@@ -58,7 +118,7 @@ export default function AdminCustomersPage() {
     setCustomerOrders(getCustomerOrders(customer.email))
   }
 
-  if (!settings) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-100">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -151,7 +211,7 @@ export default function AdminCustomersPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="font-medium">
-                        {formatPrice(totalSpent, settings.currency)}
+                        {formatPriceLocal(totalSpent, currency)}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {new Date(customer.createdAt).toLocaleDateString("ar-SY")}
@@ -235,9 +295,9 @@ export default function AdminCustomersPage() {
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">إجمالي المشتريات</span>
                       <span className="font-semibold text-primary">
-                        {formatPrice(
+                        {formatPriceLocal(
                           customerOrders.reduce((t, o) => t + o.total, 0),
-                          settings.currency
+                          currency
                         )}
                       </span>
                     </div>
@@ -245,9 +305,9 @@ export default function AdminCustomersPage() {
                       <span className="text-muted-foreground">متوسط قيمة الطلب</span>
                       <span className="font-medium">
                         {customerOrders.length > 0
-                          ? formatPrice(
+                          ? formatPriceLocal(
                               customerOrders.reduce((t, o) => t + o.total, 0) / customerOrders.length,
-                              settings.currency
+                              currency
                             )
                           : "-"}
                       </span>
@@ -284,7 +344,7 @@ export default function AdminCustomersPage() {
                           </div>
                           <div className="text-left">
                             <p className="font-semibold">
-                              {formatPrice(order.total, settings.currency)}
+                              {formatPriceLocal(order.total, currency)}
                             </p>
                             <Badge
                               variant={

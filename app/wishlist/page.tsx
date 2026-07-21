@@ -7,8 +7,18 @@ import { Button } from '@/components/ui/button'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { ProductCard } from '@/components/product-card'
-import { getWishlist } from '@/lib/store'
 import type { Product } from '@/lib/types'
+
+// ================================================
+// ✅ دوال المفضلة - محسنة لاستخدام API بدلاً من جلب كل المنتجات
+// ================================================
+const WISHLIST_KEY = 'sedra_wishlist'
+
+const getWishlist = (): string[] => {
+  if (typeof window === 'undefined') return []
+  const wishlist = localStorage.getItem(WISHLIST_KEY)
+  return wishlist ? JSON.parse(wishlist) : []
+}
 
 export default function WishlistPage() {
   const [wishlistProducts, setWishlistProducts] = useState<Product[]>([])
@@ -17,26 +27,29 @@ export default function WishlistPage() {
   const loadWishlist = async () => {
     setLoading(true)
     
-    // جلب قائمة المفضلة من localStorage (مؤقتاً)
-    const wishlist = getWishlist()
+    const wishlistIds = getWishlist()
     
-    if (wishlist.length === 0) {
+    if (wishlistIds.length === 0) {
       setWishlistProducts([])
       setLoading(false)
       return
     }
     
     try {
-      // جلب جميع المنتجات من API
-      const response = await fetch('/api/products')
-      const allProducts = await response.json()
+      // ✅ تحسين الأداء: جلب المنتجات المحددة فقط بدلاً من كل المنتجات
+      const idsParam = wishlistIds.join(',')
+      const response = await fetch(`/api/products?ids=${idsParam}`)
+      const data = await response.json()
       
-      // فلترة المنتجات الموجودة في المفضلة
-      const products = wishlist
-        .map((item) => allProducts.find((p: Product) => p.id === item.productId))
+      // ✅ API الآن يرجع { products: [...], total, page, ... }
+      const products = Array.isArray(data) ? data : data.products || []
+      
+      // الحفاظ على ترتيب المفضلة كما هو
+      const orderedProducts = wishlistIds
+        .map(id => products.find((p: Product) => p.id === id))
         .filter(Boolean) as Product[]
       
-      setWishlistProducts(products)
+      setWishlistProducts(orderedProducts)
     } catch (error) {
       console.error('Error loading wishlist:', error)
     } finally {

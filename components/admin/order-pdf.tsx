@@ -1,8 +1,18 @@
-'use client'
-
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
-import { formatPrice } from '@/lib/store'
 import type { Order, Currency } from '@/lib/types'
+
+// ================================================
+// تم تعديل دالة تنسيق السعر لاستقبال exchangeRate كمعامل
+// ================================================
+const formatPriceLocal = (price: number | string, currency: Currency, exchangeRate: number) => {
+  const numericPrice = typeof price === 'string' ? parseFloat(price) : price
+  if (isNaN(numericPrice)) return currency === 'SYP' ? `0 ل.س` : `$0`
+  
+  if (currency === 'SYP') {
+    return `${Math.round(numericPrice * exchangeRate).toLocaleString('ar-SY')} ل.س`
+  }
+  return `$${numericPrice.toFixed(2)}`
+}
 
 const styles = StyleSheet.create({
   page: {
@@ -109,13 +119,11 @@ const styles = StyleSheet.create({
 interface OrderPDFProps {
   order: Order
   currency: Currency
+  exchangeRate: number  // ✅ إضافة exchangeRate كـ prop
   getProductName: (productId: string) => string
 }
 
-export function OrderPDF({ order, currency, getProductName }: OrderPDFProps) {
-  // Wrap text for RTL
-  const rtlText = (text: string) => ({ children: text, style: styles.rtl })
-
+export function OrderPDF({ order, currency, exchangeRate, getProductName }: OrderPDFProps) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -153,69 +161,70 @@ export function OrderPDF({ order, currency, getProductName }: OrderPDFProps) {
           </View>
         </View>
 
-{/* Order Items */}
-<View style={styles.section}>
-  <Text style={styles.sectionTitle}>المنتجات</Text>
-  <View style={styles.table}>
-    <View style={styles.tableHeader}>
-      <Text style={styles.colProduct}>المنتج</Text>
-      <Text style={styles.colDetails}>التفاصيل</Text>
-      <Text style={styles.colQuantity}>الكمية</Text>
-      <Text style={styles.colPrice}>السعر</Text>
-    </View>
-    {Array.isArray(order.items) && order.items.length > 0 ? (
-      order.items.map((item, index) => {
-        const productName = getProductName(item.productId)
-        const details = [
-          item.selectedColor && `اللون: ${item.selectedColor}`,
-          item.selectedSize && `المقاس: ${item.selectedSize}`,
-        ].filter(Boolean).join(' | ')
-        
-        const totalQuantity = order.items.reduce((sum, i) => sum + i.quantity, 0)
-        const avgItemPrice = totalQuantity > 0 ? order.subtotal / totalQuantity : 0
-        const itemTotal = avgItemPrice * item.quantity
-        
-        return (
-          <View key={index} style={styles.tableRow}>
-            <Text style={styles.colProduct}>{productName}</Text>
-            <Text style={styles.colDetails}>{details || '—'}</Text>
-            <Text style={styles.colQuantity}>{item.quantity}</Text>
-            <Text style={styles.colPrice}>
-              {formatPrice(itemTotal, currency)}
-            </Text>
+        {/* Order Items */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, styles.rtl]}>المنتجات</Text>
+          <View style={styles.table}>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.colProduct, styles.rtl]}>المنتج</Text>
+              <Text style={[styles.colDetails, styles.rtl]}>التفاصيل</Text>
+              <Text style={[styles.colQuantity, styles.rtl]}>الكمية</Text>
+              <Text style={[styles.colPrice, styles.rtl]}>السعر</Text>
+            </View>
+            {Array.isArray(order.items) && order.items.length > 0 ? (
+              order.items.map((item, index) => {
+                const productName = getProductName(item.productId)
+                const details = [
+                  item.selectedColor && `اللون: ${item.selectedColor}`,
+                  item.selectedSize && `المقاس: ${item.selectedSize}`,
+                ].filter(Boolean).join(' | ')
+                
+                // ✅ حساب سعر العنصر بشكل صحيح باستخدام السعر المخزن في item
+                // تأكد من أن item يحتوي على price (يتم إرساله من checkout)
+                const itemPrice = (item as any).price || 0
+                const itemTotal = itemPrice * item.quantity
+                
+                return (
+                  <View key={index} style={styles.tableRow}>
+                    <Text style={[styles.colProduct, styles.rtl]}>{productName}</Text>
+                    <Text style={[styles.colDetails, styles.rtl]}>{details || '—'}</Text>
+                    <Text style={[styles.colQuantity, styles.rtl]}>{item.quantity}</Text>
+                    <Text style={[styles.colPrice, styles.rtl]}>
+                      {formatPriceLocal(itemTotal, currency, exchangeRate)}
+                    </Text>
+                  </View>
+                )
+              })
+            ) : (
+              <View style={styles.tableRow}>
+                <Text style={[styles.colProduct, styles.rtl]}>لا توجد منتجات</Text>
+                <Text style={[styles.colDetails, styles.rtl]}>-</Text>
+                <Text style={[styles.colQuantity, styles.rtl]}>-</Text>
+                <Text style={[styles.colPrice, styles.rtl]}>-</Text>
+              </View>
+            )}
           </View>
-        )
-      })
-    ) : (
-      <View style={styles.tableRow}>
-        <Text style={styles.colProduct}>لا توجد منتجات</Text>
-        <Text style={styles.colDetails}>-</Text>
-        <Text style={styles.colQuantity}>-</Text>
-        <Text style={styles.colPrice}>-</Text>
-      </View>
-    )}
-  </View>
-</View>
+        </View>
 
         {/* Order Summary */}
         <View style={styles.section}>
           <View style={styles.totalRow}>
             <Text style={[styles.totalLabel, styles.rtl]}>المجموع الفرعي:</Text>
-            <Text style={styles.rtl}>{formatPrice(order.subtotal, currency)}</Text>
+            <Text style={styles.rtl}>{formatPriceLocal(order.subtotal, currency, exchangeRate)}</Text>
           </View>
           {order.discount > 0 && (
             <View style={styles.totalRow}>
               <Text style={[styles.totalLabel, styles.rtl]}>الخصم {order.couponCode && `(${order.couponCode})`}:</Text>
-              <Text style={[styles.rtl, { color: '#10b981' }]}>-{formatPrice(order.discount, currency)}</Text>
+              <Text style={[styles.rtl, { color: '#10b981' }]}>-{formatPriceLocal(order.discount, currency, exchangeRate)}</Text>
             </View>
           )}
           <View style={styles.totalRow}>
             <Text style={[styles.totalLabel, styles.rtl]}>الشحن:</Text>
-            <Text style={styles.rtl}>{order.shipping === 0 ? 'مجاني' : formatPrice(order.shipping, currency)}</Text>
+            <Text style={styles.rtl}>{order.shipping === 0 ? 'مجاني' : formatPriceLocal(order.shipping, currency, exchangeRate)}</Text>
           </View>
           <View style={[styles.totalRow, { marginTop: 15, borderTopWidth: 2 }]}>
             <Text style={[styles.totalLabel, { fontSize: 14 }, styles.rtl]}>الإجمالي:</Text>
-            <Text style={[styles.totalValue, styles.rtl]}>{formatPrice(order.total, currency)}</Text>
+            <Text style={[styles.totalValue, styles.rtl]}>{formatPriceLocal(order.total, currency, exchangeRate)}</Text>
           </View>
         </View>
 

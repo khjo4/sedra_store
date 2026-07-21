@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -19,7 +19,6 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { getSettings } from '@/lib/store'
 
 const navItems = [
   { href: '/admin', label: 'لوحة التحكم', icon: LayoutDashboard },
@@ -37,7 +36,28 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const settings = getSettings()
+  const [settings, setSettings] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+    const isLoginPage = pathname === '/admin/login'
+
+  // جلب الإعدادات من API
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        setSettings(data)
+        setLoading(false)
+      })
+      .catch(err => {
+        console.error('Error fetching settings:', err)
+        setLoading(false)
+      })
+  }, [])
+
+ if (isLoginPage) {
+    return <>{children}</>
+  }
 
   const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
     <div className={cn('flex flex-col h-full', mobile ? 'pt-4' : 'py-6')}>
@@ -48,7 +68,7 @@ export default function AdminLayout({
             <Store className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <span className="font-bold text-lg">{settings.storeNameEn}</span>
+            <span className="font-bold text-lg">{settings?.store_name_en || 'SEDRA'}</span>
             <p className="text-xs text-muted-foreground">لوحة التحكم</p>
           </div>
         </Link>
@@ -98,6 +118,14 @@ export default function AdminLayout({
     </div>
   )
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-muted/30">
       {/* Desktop Sidebar */}
@@ -111,7 +139,7 @@ export default function AdminLayout({
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <Store className="h-4 w-4 text-primary-foreground" />
           </div>
-          <span className="font-bold">{settings.storeNameEn}</span>
+          <span className="font-bold">{settings?.store_name_en || 'SEDRA'}</span>
         </Link>
 
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>

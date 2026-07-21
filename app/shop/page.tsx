@@ -27,20 +27,32 @@ import { Badge } from '@/components/ui/badge'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { ProductCard } from '@/components/product-card'
-import { categories } from '@/lib/data'
-import { formatPrice, getCurrency } from '@/lib/store'
-import { cn } from '@/lib/utils'
-import type { Product, Currency } from '@/lib/types'
+import { cn, formatPriceAsync, fetchExchangeRate } from '@/lib/utils'
+import type { Product, Currency, Category } from '@/lib/types'
 
 type SortOption = 'newest' | 'price-asc' | 'price-desc' | 'popular' | 'rating'
+
+// ================================================
+// ✅ دوال العملة - تم استبدالها بـ lib/utils
+// ================================================
+// تم إزالة getCurrencyLocal و formatPriceLocal
+// الآن نستخدم:
+// - formatPriceAsync من lib/utils
+// - fetchExchangeRate من lib/utils
 
 function ShopContent() {
   const searchParams = useSearchParams()
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [currency, setCurrency] = useState<Currency>('USD')
+  const [exchangeRate, setExchangeRate] = useState(14500)
   const [gridCols, setGridCols] = useState<2 | 3 | 4>(3)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [categories, setCategories] = useState<Category[]>([])
+  
+  // ✅ حالة لتخزين الأسعار المنسقة للـ Slider
+  const [formattedMinPrice, setFormattedMinPrice] = useState('')
+  const [formattedMaxPrice, setFormattedMaxPrice] = useState('')
 
   // Filters
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
@@ -50,6 +62,33 @@ function ShopContent() {
   const [showBestSellers, setShowBestSellers] = useState(false)
   const [sortBy, setSortBy] = useState<SortOption>('newest')
   const [searchQuery, setSearchQuery] = useState('')
+
+  // ✅ تحميل العملة وسعر الصرف
+  useEffect(() => {
+    const loadCurrency = async () => {
+      const savedCurrency = localStorage.getItem('sedra_currency')
+      const currentCurrency = (savedCurrency === 'SYP' ? 'SYP' : 'USD') as Currency
+      setCurrency(currentCurrency)
+      
+      const rate = await fetchExchangeRate()
+      setExchangeRate(rate)
+      
+      // تنسيق الأسعار للـ Slider
+      const minFormatted = await formatPriceAsync(priceRange[0], currentCurrency)
+      const maxFormatted = await formatPriceAsync(priceRange[1], currentCurrency)
+      setFormattedMinPrice(minFormatted)
+      setFormattedMaxPrice(maxFormatted)
+    }
+    
+    loadCurrency()
+    
+    const handleCurrencyChange = () => {
+      loadCurrency()
+    }
+    
+    window.addEventListener('currencyChanged', handleCurrencyChange)
+    return () => window.removeEventListener('currencyChanged', handleCurrencyChange)
+  }, [priceRange])
 
   // Initialize from URL params
   useEffect(() => {
@@ -72,24 +111,43 @@ function ShopContent() {
     }
   }, [searchParams])
 
+  // جلب الأقسام من API
+useEffect(() => {
+  fetch('/api/categories', { cache: 'no-store' })
+    .then(res => res.json())
+    .then(data => {
+      const categoriesArray = Array.isArray(data) ? data : data.categories || []
+      setCategories(categoriesArray)
+    })
+    .catch(err => console.error('Error fetching categories:', err))
+}, [])
+
   // جلب المنتجات من API
+useEffect(() => {
+  async function fetchProducts() {
+    try {
+      const response = await fetch('/api/products')
+      const data = await response.json()
+      const productsArray = Array.isArray(data) ? data : data.products || []
+      setProducts(productsArray)
+    } catch (error) {
+      console.error('Error fetching products:', error)
+      setProducts([]) // ✅ في حالة الخطأ، نضع مصفوفة فاضية
+    } finally {
+      setLoading(false)
+    }
+  }
+  
+  fetchProducts()
+}, [])
+
+  // ✅ تحديث العملة عند تغييرها (بدون استخدام getCurrencyLocal)
   useEffect(() => {
-    async function fetchProducts() {
-      try {
-        const response = await fetch('/api/products')
-        const data = await response.json()
-        setProducts(data)
-      } catch (error) {
-        console.error('Error fetching products:', error)
-      } finally {
-        setLoading(false)
-      }
+    const handleCurrencyChange = () => {
+      const savedCurrency = localStorage.getItem('sedra_currency')
+      setCurrency((savedCurrency === 'SYP' ? 'SYP' : 'USD') as Currency)
     }
     
-    fetchProducts()
-    setCurrency(getCurrency())
-
-    const handleCurrencyChange = () => setCurrency(getCurrency())
     window.addEventListener('currencyChanged', handleCurrencyChange)
     return () => window.removeEventListener('currencyChanged', handleCurrencyChange)
   }, [])
@@ -170,7 +228,7 @@ function ShopContent() {
     (priceRange[0] > 0 || priceRange[1] < 100 ? 1 : 0)
 
   // عرض شاشة تحميل أثناء جلب البيانات
-  if (loading) {
+  if (loading || categories.length === 0) {
     return (
       <>
         <Header />
@@ -225,10 +283,10 @@ function ShopContent() {
 
       <Separator />
 
-      {/* Price Range */}
+      {/* ✅ Price Range - تم تحديثه */}
       <div>
         <Label className="text-sm font-medium mb-3 block">
-          نطاق السعر: {formatPrice(priceRange[0], currency)} - {formatPrice(priceRange[1], currency)}
+          نطاق السعر: {formattedMinPrice} - {formattedMaxPrice}
         </Label>
         <Slider
           value={priceRange}
@@ -356,7 +414,6 @@ function ShopContent() {
                       <SelectItem value="price-asc">السعر: من الأقل</SelectItem>
                       <SelectItem value="price-desc">السعر: من الأعلى</SelectItem>
                       <SelectItem value="popular">الأكثر شعبية</SelectItem>
-                      <SelectItem value="rating">التقييم</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

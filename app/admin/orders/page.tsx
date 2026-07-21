@@ -30,11 +30,16 @@ import {
 } from '@/components/ui/dialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { formatPrice, getCurrency } from '@/lib/store'
 import { pdf } from '@react-pdf/renderer'
 import { OrderPDF } from '@/components/admin/order-pdf'
+import { formatPrice, fetchExchangeRate } from '@/lib/utils'
 import type { Order, Currency, Product } from '@/lib/types'
 import { toast } from 'sonner'
+
+// ================================================
+// تم إزالة getCurrencyLocal و formatPriceLocal
+// الآن نستخدم formatPrice من lib/utils
+// ================================================
 
 const statusOptions: { value: Order['status']; label: string }[] = [
   { value: 'pending', label: 'قيد الانتظار' },
@@ -50,37 +55,107 @@ export default function AdminOrdersPage() {
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [currency, setCurrency] = useState<Currency>('USD')
+  const [exchangeRate, setExchangeRate] = useState(14500)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
+  
+  // حالات للأسعار المنسقة
+  const [formattedTotals, setFormattedTotals] = useState<Record<string, string>>({})
+  const [formattedSubtotals, setFormattedSubtotals] = useState<Record<string, string>>({})
+  const [formattedDiscounts, setFormattedDiscounts] = useState<Record<string, string>>({})
+  const [formattedShipping, setFormattedShipping] = useState<Record<string, string>>({})
+  const [formattedItemPrices, setFormattedItemPrices] = useState<Record<string, Record<number, string>>>({})
+
+  // تحميل العملة وسعر الصرف
+  useEffect(() => {
+    const loadCurrency = async () => {
+      const savedCurrency = localStorage.getItem('sedra_currency')
+      const currentCurrency = (savedCurrency === 'SYP' ? 'SYP' : 'USD') as Currency
+      setCurrency(currentCurrency)
+      
+      const rate = await fetchExchangeRate()
+      setExchangeRate(rate)
+    }
+    
+    loadCurrency()
+    
+    const handleCurrencyChange = () => {
+      loadCurrency()
+    }
+    window.addEventListener('currencyChanged', handleCurrencyChange)
+    return () => window.removeEventListener('currencyChanged', handleCurrencyChange)
+  }, [])
 
   // جلب المنتجات من API
   const loadProducts = async () => {
     try {
       const response = await fetch('/api/products')
       const data = await response.json()
-      setProducts(data)
+      const productsData = Array.isArray(data) ? data : data.products || []
+      setProducts(productsData)
     } catch (error) {
       console.error('Error fetching products:', error)
     }
   }
 
   // جلب الطلبات من API
- const loadOrders = async () => {
-  setLoading(true)
-  try {
-    const response = await fetch('/api/orders')
-    const data = await response.json()
-    console.log('📦 Orders data:', data) 
-    setOrders(data)
-  } catch (error) {
-    console.error('Error fetching orders:', error)
-    toast.error('حدث خطأ في جلب الطلبات')
-  } finally {
-    setLoading(false)
+  const loadOrders = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch('/api/orders')
+      const data = await response.json()
+      const ordersData = Array.isArray(data) ? data : data.orders || []
+      setOrders(ordersData)
+    } catch (error) {
+      console.error('Error fetching orders:', error)
+      toast.error('حدث خطأ في جلب الطلبات')
+    } finally {
+      setLoading(false)
+    }
   }
-}
+
+  // تحديث الأسعار المنسقة عند تغير الطلبات أو العملة
+  useEffect(() => {
+    const updatePrices = () => {
+      const totals: Record<string, string> = {}
+      const subtotals: Record<string, string> = {}
+      const discounts: Record<string, string> = {}
+      const shipping: Record<string, string> = {}
+      const itemPrices: Record<string, Record<number, string>> = {}
+
+      orders.forEach(order => {
+        totals[order.id] = formatPrice(order.total, currency, exchangeRate)
+        subtotals[order.id] = formatPrice(order.subtotal, currency, exchangeRate)
+        if (order.discount > 0) {
+          discounts[order.id] = formatPrice(order.discount, currency, exchangeRate)
+        }
+        shipping[order.id] = order.shipping === 0 ? 'مجاني' : formatPrice(order.shipping, currency, exchangeRate)
+
+        // تنسيق أسعار العناصر في الطلب
+        if (order.items && Array.isArray(order.items)) {
+          const orderItemPrices: Record<number, string> = {}
+          order.items.forEach((item, idx) => {
+            const product = products.find(p => p.id === item.productId)
+            if (product) {
+              orderItemPrices[idx] = formatPrice(product.price * item.quantity, currency, exchangeRate)
+            }
+          })
+          itemPrices[order.id] = orderItemPrices
+        }
+      })
+
+      setFormattedTotals(totals)
+      setFormattedSubtotals(subtotals)
+      setFormattedDiscounts(discounts)
+      setFormattedShipping(shipping)
+      setFormattedItemPrices(itemPrices)
+    }
+
+    updatePrices()
+  }, [orders, products, currency, exchangeRate])
+
   // تحديث حالة الطلب
   const handleStatusChange = async (orderId: string, newStatus: Order['status']) => {
     try {
@@ -94,7 +169,7 @@ export default function AdminOrdersPage() {
         throw new Error('Failed to update')
       }
 
-      await loadOrders() // إعادة تحميل الطلبات
+      await loadOrders()
       toast.success('تم تحديث حالة الطلب')
     } catch (error) {
       console.error('Error updating order:', error)
@@ -108,46 +183,23 @@ export default function AdminOrdersPage() {
     return product?.name || productId
   }
 
-  // تصدير PDF
-  const handleExportPDF = async (order: Order) => {
-    const blob = await pdf(
-      <OrderPDF 
-        order={order} 
-        currency={currency} 
-        getProductName={getProductName} 
-      />
-    ).toBlob()
-    
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `order-${order.id}.pdf`
-    link.click()
-    URL.revokeObjectURL(url)
-  }
-
   useEffect(() => {
     loadOrders()
     loadProducts()
-    setCurrency(getCurrency())
-
-    const handleCurrencyChange = () => setCurrency(getCurrency())
-    window.addEventListener('currencyChanged', handleCurrencyChange)
-    return () => window.removeEventListener('currencyChanged', handleCurrencyChange)
   }, [])
 
   useEffect(() => {
     let result = [...orders]
 
     if (searchQuery) {
-  const query = searchQuery.toLowerCase()
-  result = result.filter(
-    (o) =>
-      (o.id && o.id.toLowerCase().includes(query)) ||
-      (o.customerName && o.customerName.toLowerCase().includes(query)) ||
-      (o.customerPhone && o.customerPhone.includes(query))
-  )
-}
+      const query = searchQuery.toLowerCase()
+      result = result.filter(
+        (o) =>
+          (o.id && String(o.id).toLowerCase().includes(query)) ||
+          (o.customerName && String(o.customerName).toLowerCase().includes(query)) ||
+          (o.customerPhone && String(o.customerPhone).includes(query))
+      )
+    }
     if (statusFilter !== 'all') {
       result = result.filter((o) => o.status === statusFilter)
     }
@@ -155,7 +207,6 @@ export default function AdminOrdersPage() {
     setFilteredOrders(result)
   }, [orders, searchQuery, statusFilter])
 
-  // عرض شاشة تحميل
   if (loading) {
     return (
       <div className="space-y-6">
@@ -216,14 +267,14 @@ export default function AdminOrdersPage() {
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="text-right">
                 <TableRow>
-                  <TableHead>رقم الطلب</TableHead>
-                  <TableHead>العميل</TableHead>
-                  <TableHead>التاريخ</TableHead>
-                  <TableHead>المجموع</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead className="text-left">إجراءات</TableHead>
+                  <TableHead className="text-right">رقم الطلب</TableHead>
+                  <TableHead className="text-right">العميل</TableHead>
+                  <TableHead className="text-right">التاريخ</TableHead>
+                  <TableHead className="text-right">المجموع</TableHead>
+                  <TableHead className="text-right">الحالة</TableHead>
+                  <TableHead className="text-right">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -231,22 +282,22 @@ export default function AdminOrdersPage() {
                   filteredOrders.map((order) => (
                     <TableRow key={order.id}>
                       <TableCell className="font-mono text-sm">{order.id}</TableCell>
-                      <TableCell>
+                      <TableCell className="text-right">
                         <div>
                           <p className="font-medium">{order.customerName || 'غير معروف'}</p>
                           <p className="text-xs text-muted-foreground">{order.city || '—'}</p>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-right">
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                           <Clock className="h-3 w-3" />
+                          <Clock className="h-3 w-3" />
                           {order.createdAt ? new Date(order.createdAt).toLocaleDateString('ar-SY') : 'تاريخ غير محدد'}
-                             </div>
-                      </TableCell> 
-                      <TableCell className="font-bold">
-                        {formatPrice(order.total, currency)}
+                        </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="font-bold">
+                        {formattedTotals[order.id] || formatPrice(order.total, currency, exchangeRate)}
+                      </TableCell>
+                      <TableCell className="text-center">
                         <Select
                           value={order.status}
                           onValueChange={(value) => handleStatusChange(order.id, value as Order['status'])}
@@ -281,20 +332,6 @@ export default function AdminOrdersPage() {
                                 {selectedOrder && new Date(selectedOrder.createdAt).toLocaleString('ar-SY')}
                               </DialogDescription>
                             </DialogHeader>
-                            
-                            {/* Export PDF Button 
-                            <div className="flex justify-end">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => selectedOrder && handleExportPDF(selectedOrder)}
-                                className="gap-2"
-                              >
-                                <Download className="h-4 w-4" />
-                                تصدير PDF
-                              </Button>
-                            </div>*/}
-                            
                             {selectedOrder && (
                               <div className="space-y-6">
                                 {/* Customer Info */}
@@ -325,34 +362,36 @@ export default function AdminOrdersPage() {
                                 <Separator />
 
                                 {/* Order Items */}
-<div>
-  <h4 className="font-semibold mb-3">المنتجات</h4>
-  <div className="space-y-3">
-    {selectedOrder.items && Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
-      selectedOrder.items.map((item, index) => {
-        const product = products.find(p => p.id === item.productId)
-        return (
-          <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-            <div>
-              <p className="font-medium">{product?.name || item.productId}</p>
-              <p className="text-xs text-muted-foreground">
-                {item.selectedColor && `اللون: ${item.selectedColor}`}
-                {item.selectedColor && item.selectedSize && ' | '}
-                {item.selectedSize && `المقاس: ${item.selectedSize}`}
-                {' | '}الكمية: {item.quantity}
-              </p>
-            </div>
-            <span className="font-medium">
-              {product && formatPrice(product.price * item.quantity, currency)}
-            </span>
-          </div>
-        )
-      })
-    ) : (
-      <p className="text-center text-muted-foreground py-4">لا توجد منتجات في هذا الطلب</p>
-    )}
-  </div>
-</div>
+                                <div>
+                                  <h4 className="font-semibold mb-3">المنتجات</h4>
+                                  <div className="space-y-3">
+                                    {selectedOrder.items && Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
+                                      selectedOrder.items.map((item, index) => {
+                                        const product = products.find(p => p.id === item.productId)
+                                        const itemPrice = formattedItemPrices[selectedOrder.id]?.[index] ||
+                                          (product ? formatPrice(product.price * item.quantity, currency, exchangeRate) : '')
+                                        return (
+                                          <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                                            <div>
+                                              <p className="font-medium">{product?.name || item.productId}</p>
+                                              <p className="text-xs text-muted-foreground">
+                                                {item.selectedColor && `اللون: ${item.selectedColor}`}
+                                                {item.selectedColor && item.selectedSize && ' | '}
+                                                {item.selectedSize && `المقاس: ${item.selectedSize}`}
+                                                {' | '}الكمية: {item.quantity}
+                                              </p>
+                                            </div>
+                                            <span className="font-medium">
+                                              {itemPrice}
+                                            </span>
+                                          </div>
+                                        )
+                                      })
+                                    ) : (
+                                      <p className="text-center text-muted-foreground py-4">لا توجد منتجات في هذا الطلب</p>
+                                    )}
+                                  </div>
+                                </div>
 
                                 <Separator />
 
@@ -360,24 +399,24 @@ export default function AdminOrdersPage() {
                                 <div className="space-y-2 text-sm">
                                   <div className="flex justify-between">
                                     <span className="text-muted-foreground">المجموع الفرعي</span>
-                                    <span>{formatPrice(selectedOrder.subtotal, currency)}</span>
+                                    <span>{formattedSubtotals[selectedOrder.id] || formatPrice(selectedOrder.subtotal, currency, exchangeRate)}</span>
                                   </div>
                                   {selectedOrder.discount > 0 && (
                                     <div className="flex justify-between text-green-600">
                                       <span>الخصم {selectedOrder.couponCode && `(${selectedOrder.couponCode})`}</span>
-                                      <span>-{formatPrice(selectedOrder.discount, currency)}</span>
+                                      <span>-{formattedDiscounts[selectedOrder.id] || formatPrice(selectedOrder.discount, currency, exchangeRate)}</span>
                                     </div>
                                   )}
                                   <div className="flex justify-between">
                                     <span className="text-muted-foreground">الشحن</span>
                                     <span>
-                                      {selectedOrder.shipping === 0 ? 'مجاني' : formatPrice(selectedOrder.shipping, currency)}
+                                      {formattedShipping[selectedOrder.id] || (selectedOrder.shipping === 0 ? 'مجاني' : formatPrice(selectedOrder.shipping, currency, exchangeRate))}
                                     </span>
                                   </div>
                                   <Separator />
                                   <div className="flex justify-between font-bold text-lg">
                                     <span>الإجمالي</span>
-                                    <span className="text-primary">{formatPrice(selectedOrder.total, currency)}</span>
+                                    <span className="text-primary">{formattedTotals[selectedOrder.id] || formatPrice(selectedOrder.total, currency, exchangeRate)}</span>
                                   </div>
                                 </div>
 

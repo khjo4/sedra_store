@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { ImageUpload } from '@/components/ui/image-upload';
+
 import {
   Select,
   SelectContent,
@@ -24,10 +25,9 @@ const categories = [
   { value: 'accessories', label: 'اكسسوارات' },
   { value: 'perfumes', label: 'عطورات' },
   { value: 'makeup', label: 'مكياج' },
+  { value: 'cup', label: 'أكواب' },
+  { value: 'care', label: 'العناية والاهتمام' },
   { value: 'gift-sets', label: 'مجموعات الهدايا' },
-  { value: 'dresses', label: 'فساتين' },
-  { value: 'blouses', label: 'بلوزات' },
-  { value: 'skirts', label: 'تنانير' },
 ]
 
 export default function AdminNewProductPage() {
@@ -239,14 +239,14 @@ export default function AdminNewProductPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="images" className="mb-2 block">صور المنتج (روابط مفصولة بفواصل)</Label>
-                  <ImageUpload
-                    value={formData.images ? formData.images.split(',').map(img => img.trim()) : []}
-                    onChange={(urls) => setFormData({ ...formData, images: urls.join(', ') })}
-                     maxFiles={5}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">اتركيها فارغة لاستخدام صورة افتراضية</p>
-                </div>
+  <Label htmlFor="images" className="mb-2 block">صور المنتج</Label>
+  <ImageUpload
+    value={formData.images ? formData.images.split(',').map(img => img.trim()) : []}
+    onChange={(urls) => setFormData({ ...formData, images: urls.join(', ') })}
+    maxFiles={5}
+  />
+  <p className="text-xs text-muted-foreground mt-1">يمكنك رفع حتى 5 صور</p>
+</div>
               </CardContent>
             </Card>
           </div>

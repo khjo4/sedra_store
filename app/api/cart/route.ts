@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getConnection } from '@/lib/db';
+import { getCart, addToCart, updateCartItem, clearCart } from '@/lib/db';
 
-// GET - جلب السلة (حسب session_id)
+// ✅ GET - جلب السلة (حسب session_id)
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -11,16 +11,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'sessionId مطلوب' }, { status: 400 });
     }
     
-    const connection = await getConnection();
-    const [rows] = await connection.execute(
-      `SELECT c.*, p.name, p.price, p.images 
-       FROM cart c 
-       JOIN products p ON c.product_id = p.id 
-       WHERE c.session_id = ?`,
-      [sessionId]
-    );
+    // ✅ استخدام الدالة من db.ts (التي تقوم بتحويل البيانات تلقائياً)
+    const cart = await getCart(sessionId);
     
-    return NextResponse.json(rows);
+    return NextResponse.json(cart);
   } catch (error) {
     console.error('Error fetching cart:', error);
     return NextResponse.json(
@@ -30,43 +24,35 @@ export async function GET(request: Request) {
   }
 }
 
-// POST - إضافة منتج للسلة
+// ✅ POST - إضافة منتج للسلة
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { sessionId, productId, quantity, selectedColor, selectedSize } = body;
     
+    // ✅ التحقق من البيانات الأساسية
     if (!sessionId || !productId) {
-      return NextResponse.json({ error: 'بيانات ناقصة' }, { status: 400 });
-    }
-    
-    const connection = await getConnection();
-    
-    // التأكد إذا المنتج موجود بالفعل في السلة
-    const [existing] = await connection.execute(
-      `SELECT * FROM cart WHERE session_id = ? AND product_id = ? 
-       AND selected_color = ? AND selected_size = ?`,
-      [sessionId, productId, selectedColor || null, selectedSize || null]
-    );
-    
-    const existingCart = existing as any[];
-    
-    if (existingCart.length > 0) {
-      // تحديث الكمية
-      await connection.execute(
-        `UPDATE cart SET quantity = quantity + ? 
-         WHERE session_id = ? AND product_id = ? 
-         AND selected_color = ? AND selected_size = ?`,
-        [quantity || 1, sessionId, productId, selectedColor || null, selectedSize || null]
-      );
-    } else {
-      // إضافة منتج جديد
-      await connection.execute(
-        `INSERT INTO cart (id, session_id, product_id, quantity, selected_color, selected_size)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [`CART-${Date.now()}`, sessionId, productId, quantity || 1, selectedColor || null, selectedSize || null]
+      return NextResponse.json(
+        { error: 'sessionId و productId مطلوبان' },
+        { status: 400 }
       );
     }
+    
+    // ✅ التحقق من وجود المنتج (اختياري، يمكن إضافته لاحقاً)
+    // const { getProductById } = await import('@/lib/db');
+    // const product = await getProductById(productId);
+    // if (!product) {
+    //   return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 });
+    // }
+    
+    // ✅ استخدام الدالة من db.ts
+    await addToCart({
+      sessionId,
+      productId,
+      quantity: quantity || 1,
+      selectedColor,
+      selectedSize,
+    });
     
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (error) {
@@ -78,30 +64,34 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT - تحديث كمية منتج في السلة
+// ✅ PUT - تحديث كمية منتج في السلة
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
     const { sessionId, productId, quantity, selectedColor, selectedSize } = body;
     
-    const connection = await getConnection();
-    
-    if (quantity <= 0) {
-      // حذف المنتج من السلة
-      await connection.execute(
-        `DELETE FROM cart WHERE session_id = ? AND product_id = ? 
-         AND selected_color = ? AND selected_size = ?`,
-        [sessionId, productId, selectedColor || null, selectedSize || null]
-      );
-    } else {
-      // تحديث الكمية
-      await connection.execute(
-        `UPDATE cart SET quantity = ? 
-         WHERE session_id = ? AND product_id = ? 
-         AND selected_color = ? AND selected_size = ?`,
-        [quantity, sessionId, productId, selectedColor || null, selectedSize || null]
+    if (!sessionId || !productId) {
+      return NextResponse.json(
+        { error: 'sessionId و productId مطلوبان' },
+        { status: 400 }
       );
     }
+    
+    if (quantity === undefined) {
+      return NextResponse.json(
+        { error: 'الكمية مطلوبة' },
+        { status: 400 }
+      );
+    }
+    
+    // ✅ استخدام الدالة من db.ts (تتعامل مع الحذف إذا quantity <= 0)
+    await updateCartItem({
+      sessionId,
+      productId,
+      quantity,
+      selectedColor,
+      selectedSize,
+    });
     
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -113,7 +103,7 @@ export async function PUT(request: Request) {
   }
 }
 
-// DELETE - تفريغ السلة بالكامل
+// ✅ DELETE - تفريغ السلة بالكامل
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -123,8 +113,8 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'sessionId مطلوب' }, { status: 400 });
     }
     
-    const connection = await getConnection();
-    await connection.execute('DELETE FROM cart WHERE session_id = ?', [sessionId]);
+    // ✅ استخدام الدالة من db.ts
+    await clearCart(sessionId);
     
     return NextResponse.json({ success: true });
   } catch (error) {

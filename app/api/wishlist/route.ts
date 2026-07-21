@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getConnection } from '@/lib/db';
+import { getWishlist, addToWishlist, removeFromWishlist, getProductById } from '@/lib/db';
 
-// GET - جلب المفضلة
+// ✅ GET - جلب المفضلة
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -11,16 +11,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'البريد الإلكتروني مطلوب' }, { status: 400 });
     }
     
-    const connection = await getConnection();
-    const [rows] = await connection.execute(
-      `SELECT w.*, p.name, p.price, p.images 
-       FROM wishlist w 
-       JOIN products p ON w.product_id = p.id 
-       WHERE w.customer_email = ?`,
-      [customerEmail]
-    );
+    // ✅ استخدام الدالة من db.ts (التي تقوم بتحويل البيانات تلقائياً)
+    const wishlist = await getWishlist(customerEmail);
     
-    return NextResponse.json(rows);
+    return NextResponse.json(wishlist);
   } catch (error) {
     console.error('Error fetching wishlist:', error);
     return NextResponse.json(
@@ -30,33 +24,31 @@ export async function GET(request: Request) {
   }
 }
 
-// POST - إضافة للمفضلة
+// ✅ POST - إضافة للمفضلة
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { customerEmail, productId } = body;
     
+    // ✅ التحقق من البيانات الأساسية
     if (!customerEmail || !productId) {
-      return NextResponse.json({ error: 'بيانات ناقصة' }, { status: 400 });
-    }
-    
-    const connection = await getConnection();
-    
-    // التأكد إذا المنتج موجود بالفعل
-    const [existing] = await connection.execute(
-      'SELECT * FROM wishlist WHERE customer_email = ? AND product_id = ?',
-      [customerEmail, productId]
-    );
-    
-    const existingWishlist = existing as any[];
-    
-    if (existingWishlist.length === 0) {
-      await connection.execute(
-        `INSERT INTO wishlist (id, customer_email, product_id)
-         VALUES (?, ?, ?)`,
-        [`WISH-${Date.now()}`, customerEmail, productId]
+      return NextResponse.json(
+        { error: 'البريد الإلكتروني و productId مطلوبان' },
+        { status: 400 }
       );
     }
+    
+    // ✅ التحقق من وجود المنتج
+    const product = await getProductById(productId);
+    if (!product) {
+      return NextResponse.json(
+        { error: 'المنتج غير موجود' },
+        { status: 404 }
+      );
+    }
+    
+    // ✅ استخدام الدالة من db.ts (تتعامل مع حالة التكرار تلقائياً)
+    await addToWishlist(customerEmail, productId);
     
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (error) {
@@ -68,7 +60,7 @@ export async function POST(request: Request) {
   }
 }
 
-// DELETE - حذف من المفضلة
+// ✅ DELETE - حذف من المفضلة
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -76,14 +68,14 @@ export async function DELETE(request: Request) {
     const productId = searchParams.get('productId');
     
     if (!customerEmail || !productId) {
-      return NextResponse.json({ error: 'بيانات ناقصة' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'البريد الإلكتروني و productId مطلوبان' },
+        { status: 400 }
+      );
     }
     
-    const connection = await getConnection();
-    await connection.execute(
-      'DELETE FROM wishlist WHERE customer_email = ? AND product_id = ?',
-      [customerEmail, productId]
-    );
+    // ✅ استخدام الدالة من db.ts
+    await removeFromWishlist(customerEmail, productId);
     
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -284,24 +284,30 @@ export default function AdminNewProductPage() {
                 <CardTitle>الحالة</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="featured">منتج مميز</Label>
+                <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/30 px-3 py-3">
+                  <Label htmlFor="featured" className="cursor-pointer leading-none">
+                    منتج مميز
+                  </Label>
                   <Switch
                     id="featured"
                     checked={formData.featured}
                     onCheckedChange={(checked) => setFormData({ ...formData, featured: checked })}
                   />
                 </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="bestSeller">الأكثر مبيعاً</Label>
+                <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/30 px-3 py-3">
+                  <Label htmlFor="bestSeller" className="cursor-pointer leading-none">
+                    الأكثر مبيعاً
+                  </Label>
                   <Switch
                     id="bestSeller"
                     checked={formData.bestSeller}
                     onCheckedChange={(checked) => setFormData({ ...formData, bestSeller: checked })}
                   />
                 </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="newArrival">وصل حديثاً</Label>
+                <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/30 px-3 py-3">
+                  <Label htmlFor="newArrival" className="cursor-pointer leading-none">
+                    وصل حديثاً
+                  </Label>
                   <Switch
                     id="newArrival"
                     checked={formData.newArrival}

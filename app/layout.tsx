@@ -23,6 +23,14 @@ export const metadata: Metadata = {
   authors: [{ name: 'SEDRA' }],
   creator: 'SEDRA',
   publisher: 'SEDRA',
+  icons: {
+    icon: [
+      { url: '/favicon.png', type: 'image/png', sizes: '192x192' },
+      { url: '/favicon-32.png', type: 'image/png', sizes: '32x32' },
+    ],
+    apple: [{ url: '/apple-icon.png', sizes: '180x180', type: 'image/png' }],
+    shortcut: '/favicon.png',
+  },
   openGraph: {
     type: 'website',
     locale: 'ar_SY',
@@ -30,11 +38,13 @@ export const metadata: Metadata = {
     siteName: 'سيدرا | SEDRA',
     title: 'سيدرا | SEDRA - منتجات واكسسوارات راقية',
     description: 'تسوقي أجمل تشكيلة من المنتجات الراقية',
+    images: [{ url: '/image/logo.png', alt: 'SEDRA' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'سيدرا | SEDRA',
     description: 'اكسسوارات ومنتجات راقية',
+    images: ['/image/logo.png'],
   },
   robots: {
     index: true,

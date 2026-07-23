@@ -333,8 +333,10 @@ export default function AdminCouponsPage() {
                 <p className="text-xs text-muted-foreground">اتركه فارغاً لكوبون ينتهي بعد 30 يوم</p>
               </div>
 
-              <div className="flex items-center justify-between">
-                <Label htmlFor="active">الكوبون نشط</Label>
+              <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/30 px-3 py-3">
+                <Label htmlFor="active" className="cursor-pointer leading-none">
+                  الكوبون نشط
+                </Label>
                 <Switch
                   id="active"
                   checked={formData.active}

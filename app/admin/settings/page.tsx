@@ -240,10 +240,12 @@ export default function AdminSettingsPage() {
               </p>
             </div>
             <Separator />
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/30 px-3 py-3">
               <div>
-                <Label htmlFor="freeShippingEnabled">تفعيل الشحن المجاني</Label>
-                <p className="text-xs text-muted-foreground mt-1">
+                <Label htmlFor="freeShippingEnabled" className="cursor-pointer">
+                  تفعيل الشحن المجاني
+                </Label>
+                <p className="mt-1 text-xs text-muted-foreground">
                   عند التعطيل لن يُمنح شحن مجاني مهما بلغ مبلغ الطلب
                 </p>
               </div>
@@ -331,8 +333,10 @@ export default function AdminSettingsPage() {
                 rows={2}
               />
             </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="announcementActive">تفعيل شريط الإعلانات</Label>
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/30 px-3 py-3">
+              <Label htmlFor="announcementActive" className="cursor-pointer leading-none">
+                تفعيل شريط الإعلانات
+              </Label>
               <Switch
                 id="announcementActive"
                 checked={formData.announcementActive}

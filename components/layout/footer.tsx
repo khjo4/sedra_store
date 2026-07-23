@@ -139,7 +139,7 @@ export function Footer() {
 
         <div className="flex flex-col items-center justify-between gap-3 text-sm text-muted-foreground md:flex-row">
           <p>
-            جميع الحقوق محفوظة {new Date().getFullYear()} {storeNameEn}
+            جميع الحقوق محفوظة {storeNameEn}
           </p>
         </div>
       </div>

@@ -155,16 +155,16 @@ useEffect(() => {
         <section className="relative flex min-h-[78vh] items-center overflow-hidden">
           <div className="absolute inset-0 bg-linear-to-bl from-pink-light via-background to-beige" />
           <div className="absolute inset-0 opacity-40">
-            <div className="absolute top-16 end-10 h-72 w-72 animate-[loginOrbFloat_12s_ease-in-out_infinite] rounded-full bg-primary/15 blur-3xl" />
-            <div className="absolute bottom-10 start-8 h-96 w-96 animate-[loginOrbFloat_14s_ease-in-out_infinite] rounded-full bg-accent/20 blur-3xl [animation-delay:-5s]" />
+            <div className="absolute top-16 inset-e-10 h-72 w-72 animate-[loginOrbFloat_12s_ease-in-out_infinite] rounded-full bg-primary/15 blur-3xl" />
+            <div className="absolute bottom-10 inset-s-8 h-96 w-96 animate-[loginOrbFloat_14s_ease-in-out_infinite] rounded-full bg-accent/20 blur-3xl [animation-delay:-5s]" />
           </div>
 
           <div className="container relative z-10 mx-auto px-4 py-16 md:py-20">
             <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
               <div className="relative order-1 animate-slide-up lg:order-2">
                 <div className="relative mx-auto aspect-3/4 max-w-md">
-                  <div className="absolute inset-0 rotate-2 rounded-[2rem] bg-linear-to-br from-primary/15 to-accent/20" />
-                  <div className="absolute inset-0 overflow-hidden rounded-[2rem] border border-border/40 bg-card/50 shadow-[0_30px_80px_-40px_oklch(0.4_0.05_20/0.45)] backdrop-blur-sm">
+                  <div className="absolute inset-0 rotate-2 rounded-4xl bg-linear-to-br from-primary/15 to-accent/20" />
+                  <div className="absolute inset-0 overflow-hidden rounded-4xl border border-border/40 bg-card/50 shadow-[0_30px_80px_-40px_oklch(0.4_0.05_20/0.45)] backdrop-blur-sm">
                     <Image
                       src="/image/logo.png"
                       alt="SEDRA"
@@ -177,9 +177,6 @@ useEffect(() => {
               </div>
 
               <div className="order-2 animate-fade-in text-center lg:order-1 lg:text-start">
-                <p className="mb-4 text-sm font-semibold tracking-[0.2em] text-primary/80">
-                  SEDRA
-                </p>
                 <h1 className="mb-5 text-balance text-4xl font-bold leading-[1.15] tracking-tight md:text-5xl lg:text-[3.25rem]">
                   {settings.hero_title || settings.heroTitle}
                 </h1>
@@ -396,9 +393,9 @@ useEffect(() => {
         {/* CTA */}
         <section className="pb-16 pt-4 md:pb-20">
           <div className="container mx-auto px-4">
-            <div className="relative overflow-hidden rounded-[2rem] gradient-primary p-8 text-primary-foreground md:p-12">
-              <div className="absolute -start-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
-              <div className="absolute -bottom-16 -end-8 h-48 w-48 rounded-full bg-black/10 blur-2xl" />
+            <div className="relative overflow-hidden rounded-4xl gradient-primary p-8 text-primary-foreground md:p-12">
+              <div className="absolute -inset-s-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+              <div className="absolute -bottom-16 -inset-e-8 h-48 w-48 rounded-full bg-black/10 blur-2xl" />
               <div className="relative z-10 mx-auto max-w-2xl text-center">
                 <h2 className="mb-3 text-2xl font-bold md:text-3xl">ابدئي تسوقك مع سيدرا</h2>
                 <p className="mb-7 text-primary-foreground/85">

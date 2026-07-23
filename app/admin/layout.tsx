@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   Package,
@@ -11,13 +11,11 @@ import {
   Ticket,
   Settings,
   Menu,
-  X,
-  Store,
-  ChevronLeft,
+  ExternalLink,
+  LogOut,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
-import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -35,90 +33,68 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [settings, setSettings] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [authorized, setAuthorized] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
 
-    const isLoginPage = pathname === '/admin/login'
+  const isLoginPage = pathname === '/admin/login'
 
-  // جلب الإعدادات من API
+  useEffect(() => {
+    if (isLoginPage) {
+      setLoading(false)
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/admin/me', { credentials: 'include' })
+        if (!res.ok) {
+          localStorage.removeItem('admin_token')
+          router.replace('/admin/login')
+          return
+        }
+        if (!cancelled) setAuthorized(true)
+      } catch {
+        router.replace('/admin/login')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isLoginPage, router, pathname])
+
   useEffect(() => {
     fetch('/api/settings')
-      .then(res => res.json())
-      .then(data => {
-        setSettings(data)
-        setLoading(false)
-      })
-      .catch(err => {
-        console.error('Error fetching settings:', err)
-        setLoading(false)
-      })
+      .then((res) => res.json())
+      .then((data) => setSettings(data))
+      .catch(() => {})
   }, [])
 
- if (isLoginPage) {
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' })
+    } catch {
+      // ignore
+    }
+    localStorage.removeItem('admin_token')
+    window.dispatchEvent(new Event('adminLogout'))
+    router.replace('/admin/login')
+    router.refresh()
+  }
+
+  if (isLoginPage) {
     return <>{children}</>
   }
 
-  const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
-    <div className={cn('flex flex-col h-full', mobile ? 'pt-4' : 'py-6')}>
-      {/* Logo */}
-      <div className="px-4 mb-6">
-        <Link href="/admin" className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-            <Store className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <div>
-            <span className="font-bold text-lg">{settings?.store_name_en || 'SEDRA'}</span>
-            <p className="text-xs text-muted-foreground">لوحة التحكم</p>
-          </div>
-        </Link>
-      </div>
-
-      <Separator className="mb-4" />
-
-      {/* Navigation */}
-      <nav className="flex-1 px-2">
-        <ul className="space-y-1">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || 
-              (item.href !== '/admin' && pathname.startsWith(item.href))
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  onClick={() => mobile && setSidebarOpen(false)}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors',
-                    isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  )}
-                >
-                  <item.icon className="h-5 w-5" />
-                  <span className="font-medium">{item.label}</span>
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
-      </nav>
-
-      <Separator className="my-4" />
-
-      {/* Back to Store */}
-      <div className="px-2">
-        <Link
-          href="/"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-        >
-          <ChevronLeft className="h-5 w-5" />
-          <span className="font-medium">العودة للمتجر</span>
-        </Link>
-      </div>
-    </div>
-  )
-
-  if (loading) {
+  if (loading || !authorized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/30">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -126,41 +102,144 @@ export default function AdminLayout({
     )
   }
 
+  const storeName = settings?.storeNameEn || settings?.store_name_en || 'SEDRA'
+  const storeNameAr = settings?.storeName || settings?.store_name || 'سيدرا'
+
+  const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
+    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
+      {/* Brand */}
+      <div className="relative overflow-hidden border-b border-sidebar-border px-5 py-6">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-40"
+          style={{
+            background:
+              'radial-gradient(ellipse at top right, color-mix(in oklch, var(--primary) 28%, transparent), transparent 70%)',
+          }}
+        />
+        <Link
+          href="/admin"
+          onClick={() => mobile && setSidebarOpen(false)}
+          className="relative flex items-center gap-3"
+        >
+          <img
+            src="/image/logo.png"
+            alt={storeName}
+            className="h-11 w-11 rounded-2xl object-contain bg-background/80 p-1 shadow-sm ring-1 ring-border/60"
+          />
+          <div className="min-w-0">
+            <p className="truncate text-base font-bold tracking-wide text-gradient">{storeName}</p>
+            <p className="truncate text-xs text-muted-foreground">{storeNameAr} · إدارة</p>
+          </div>
+        </Link>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 overflow-y-auto px-3 py-5">
+        <p className="mb-2 px-3 text-[11px] font-semibold tracking-wider text-muted-foreground/80">
+          القائمة
+        </p>
+        <ul className="space-y-1">
+          {navItems.map((item) => {
+            const isActive =
+              pathname === item.href ||
+              (item.href !== '/admin' && pathname.startsWith(item.href))
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  onClick={() => mobile && setSidebarOpen(false)}
+                  className={cn(
+                    'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                    isActive
+                      ? 'bg-primary/12 text-primary shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_22%,transparent)]'
+                      : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                  )}
+                >
+                  {isActive && (
+                    <span className="absolute inset-y-2 start-0 w-1 rounded-full bg-primary" />
+                  )}
+                  <span
+                    className={cn(
+                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
+                      isActive
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/70 text-muted-foreground group-hover:bg-background group-hover:text-foreground'
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" />
+                  </span>
+                  <span className="truncate">{item.label}</span>
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      </nav>
+
+      {/* Footer actions */}
+      <div className="mt-auto space-y-2 border-t border-sidebar-border p-3">
+        <Link
+          href="/"
+          target="_blank"
+          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/70">
+            <ExternalLink className="h-4 w-4" />
+          </span>
+          <span>عرض المتجر</span>
+        </Link>
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-60"
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-destructive/10">
+            <LogOut className="h-4 w-4" />
+          </span>
+          <span>{loggingOut ? 'جاري الخروج...' : 'تسجيل الخروج'}</span>
+        </button>
+      </div>
+    </div>
+  )
+
   return (
-    <div className="min-h-screen bg-muted/30">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:fixed lg:inset-y-0 lg:right-0 lg:flex lg:w-64 lg:flex-col bg-card border-l border-border">
+    <div className="min-h-screen bg-[color-mix(in_oklch,var(--beige)_55%,var(--background))]">
+      {/* Desktop sidebar */}
+      <aside className="fixed inset-y-0 end-0 z-40 hidden w-[17.5rem] flex-col border-s border-sidebar-border bg-sidebar shadow-[-8px_0_30px_-18px_rgba(40,20,10,0.18)] lg:flex">
         <Sidebar />
       </aside>
 
-      {/* Mobile Header */}
-      <header className="lg:hidden sticky top-0 z-50 flex items-center justify-between h-16 px-4 bg-card border-b border-border">
-        <Link href="/admin" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <Store className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span className="font-bold">{settings?.store_name_en || 'SEDRA'}</span>
+      {/* Mobile top bar */}
+      <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-border bg-card/90 px-4 backdrop-blur-md lg:hidden">
+        <Link href="/admin" className="flex items-center gap-2.5">
+          <img
+            src="/image/logo.png"
+            alt={storeName}
+            className="h-8 w-8 rounded-xl object-contain bg-primary/5 p-0.5"
+          />
+          <span className="font-bold tracking-wide">{storeName}</span>
         </Link>
 
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon">
-              <Menu className="h-6 w-6" />
+            <Button variant="outline" size="icon" className="rounded-xl">
+              <Menu className="h-5 w-5" />
               <span className="sr-only">فتح القائمة</span>
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="w-64 p-0">
+          <SheetContent
+            side="right"
+            className="w-[17.5rem] border-sidebar-border bg-sidebar p-0 [&>button]:top-4 [&>button]:end-4"
+          >
             <SheetTitle className="sr-only">قائمة الإدارة</SheetTitle>
             <Sidebar mobile />
           </SheetContent>
         </Sheet>
       </header>
 
-      {/* Main Content */}
-      <main className="lg:mr-64">
-        <div className="p-4 md:p-6 lg:p-8">
-          {children}
-        </div>
+      <main className="lg:me-[17.5rem]">
+        <div className="mx-auto max-w-7xl p-4 md:p-6 lg:p-8">{children}</div>
       </main>
     </div>
   )

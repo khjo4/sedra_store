@@ -4,89 +4,90 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* LIPIKAAR Luxury Theme - Pink/Gold/Beige */
-  --background: oklch(0.98 0.005 60);
-  --foreground: oklch(0.25 0.02 30);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.25 0.02 30);
+  /* SEDRA — soft rose boutique */
+  --background: oklch(0.985 0.008 20);
+  --foreground: oklch(0.22 0.02 25);
+  --card: oklch(0.995 0.004 20);
+  --card-foreground: oklch(0.22 0.02 25);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.25 0.02 30);
+  --popover-foreground: oklch(0.22 0.02 25);
   --primary: oklch(0.65 0.15 350);
   --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.95 0.02 80);
   --secondary-foreground: oklch(0.35 0.02 30);
   --muted: oklch(0.95 0.01 60);
-  --muted-foreground: oklch(0.5 0.02 30);
+  --muted-foreground: oklch(0.48 0.02 25);
   --accent: oklch(0.75 0.12 85);
   --accent-foreground: oklch(0.25 0.02 30);
-  --destructive: oklch(0.55 0.22 25);
+  --destructive: oklch(0.55 0.2 25);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.9 0.02 60);
-  --input: oklch(0.92 0.02 60);
+  --border: oklch(0.91 0.015 20);
+  --input: oklch(0.93 0.012 20);
   --ring: oklch(0.65 0.15 350);
   --chart-1: oklch(0.65 0.15 350);
   --chart-2: oklch(0.75 0.12 85);
   --chart-3: oklch(0.6 0.1 180);
   --chart-4: oklch(0.7 0.15 300);
   --chart-5: oklch(0.65 0.2 30);
-  --radius: 0.75rem;
-  --sidebar: oklch(0.98 0.005 60);
-  --sidebar-foreground: oklch(0.25 0.02 30);
+  --radius: 1rem;
+  --sidebar: oklch(0.985 0.008 20);
+  --sidebar-foreground: oklch(0.22 0.02 25);
   --sidebar-primary: oklch(0.65 0.15 350);
   --sidebar-primary-foreground: oklch(1 0 0);
   --sidebar-accent: oklch(0.95 0.02 80);
   --sidebar-accent-foreground: oklch(0.35 0.02 30);
-  --sidebar-border: oklch(0.9 0.02 60);
+  --sidebar-border: oklch(0.91 0.015 20);
   --sidebar-ring: oklch(0.65 0.15 350);
-  
-  /* Custom LIPIKAAR variables */
+
   --gold: oklch(0.75 0.12 85);
   --pink-light: oklch(0.92 0.06 350);
   --beige: oklch(0.95 0.02 80);
+  --surface-glow: oklch(0.92 0.06 350 / 0.45);
 }
 
 .dark {
-  --background: oklch(0.15 0.02 30);
-  --foreground: oklch(0.95 0.01 60);
-  --card: oklch(0.18 0.02 30);
-  --card-foreground: oklch(0.95 0.01 60);
-  --popover: oklch(0.18 0.02 30);
-  --popover-foreground: oklch(0.95 0.01 60);
+  --background: oklch(0.16 0.015 25);
+  --foreground: oklch(0.96 0.01 20);
+  --card: oklch(0.2 0.015 25);
+  --card-foreground: oklch(0.96 0.01 20);
+  --popover: oklch(0.2 0.015 25);
+  --popover-foreground: oklch(0.96 0.01 20);
   --primary: oklch(0.7 0.15 350);
   --primary-foreground: oklch(0.15 0.02 30);
-  --secondary: oklch(0.25 0.02 30);
-  --secondary-foreground: oklch(0.95 0.01 60);
-  --muted: oklch(0.25 0.02 30);
-  --muted-foreground: oklch(0.65 0.02 60);
+  --secondary: oklch(0.26 0.02 25);
+  --secondary-foreground: oklch(0.96 0.01 20);
+  --muted: oklch(0.26 0.02 25);
+  --muted-foreground: oklch(0.68 0.02 20);
   --accent: oklch(0.55 0.1 85);
   --accent-foreground: oklch(0.95 0.01 60);
-  --destructive: oklch(0.45 0.2 25);
-  --destructive-foreground: oklch(0.95 0.01 60);
-  --border: oklch(0.28 0.02 30);
-  --input: oklch(0.25 0.02 30);
+  --destructive: oklch(0.5 0.18 25);
+  --destructive-foreground: oklch(0.96 0.01 20);
+  --border: oklch(0.3 0.015 25);
+  --input: oklch(0.26 0.02 25);
   --ring: oklch(0.7 0.15 350);
   --chart-1: oklch(0.7 0.15 350);
   --chart-2: oklch(0.6 0.1 85);
   --chart-3: oklch(0.55 0.1 180);
   --chart-4: oklch(0.65 0.15 300);
   --chart-5: oklch(0.6 0.2 30);
-  --sidebar: oklch(0.18 0.02 30);
-  --sidebar-foreground: oklch(0.95 0.01 60);
+  --sidebar: oklch(0.18 0.015 25);
+  --sidebar-foreground: oklch(0.96 0.01 20);
   --sidebar-primary: oklch(0.7 0.15 350);
   --sidebar-primary-foreground: oklch(0.15 0.02 30);
-  --sidebar-accent: oklch(0.25 0.02 30);
-  --sidebar-accent-foreground: oklch(0.95 0.01 60);
-  --sidebar-border: oklch(0.28 0.02 30);
+  --sidebar-accent: oklch(0.26 0.02 25);
+  --sidebar-accent-foreground: oklch(0.96 0.01 20);
+  --sidebar-border: oklch(0.3 0.015 25);
   --sidebar-ring: oklch(0.7 0.15 350);
-  
+
   --gold: oklch(0.6 0.1 85);
   --pink-light: oklch(0.35 0.08 350);
   --beige: oklch(0.25 0.02 80);
+  --surface-glow: oklch(0.35 0.08 350 / 0.3);
 }
 
 @theme inline {
-  --font-sans: 'Cairo', 'Geist', sans-serif;
-  --font-mono: 'Geist Mono', monospace;
+  --font-sans: var(--font-cairo), 'Cairo', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -111,8 +112,8 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 4px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --color-sidebar: var(--sidebar);
@@ -132,100 +133,147 @@
   * {
     @apply border-border outline-ring/50;
   }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 100% -10%, var(--surface-glow), transparent 55%),
+      radial-gradient(ellipse 60% 40% at 0% 100%, oklch(0.95 0.03 75 / 0.35), transparent 50%);
+    background-attachment: fixed;
+    letter-spacing: 0.01em;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.01em;
+    font-weight: 700;
+  }
+
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 28%, transparent);
+    color: var(--foreground);
   }
 }
 
-/* Custom utility classes */
 @layer utilities {
   .glass {
-    @apply bg-card/80 backdrop-blur-md border border-border/50;
+    @apply border border-border/40 bg-card/75 backdrop-blur-xl;
   }
-  
+
   .glass-strong {
-    @apply bg-card/90 backdrop-blur-lg border border-border/60;
+    @apply border border-border/50 bg-card/90 backdrop-blur-2xl;
   }
-  
+
   .gradient-primary {
-    background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+    background: linear-gradient(135deg, var(--primary) 0%, color-mix(in oklch, var(--primary) 70%, var(--gold)) 100%);
   }
-  
+
   .text-gradient {
-    background: linear-gradient(135deg, var(--primary) 0%, var(--gold) 100%);
+    background: linear-gradient(120deg, var(--primary) 10%, var(--gold) 90%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
-  
+
+  .page-section {
+    @apply py-14 md:py-20;
+  }
+
+  .section-title {
+    @apply text-2xl font-bold tracking-tight md:text-3xl;
+  }
+
+  .section-subtitle {
+    @apply mt-1.5 text-sm text-muted-foreground md:text-base;
+  }
+
+  .store-surface {
+    @apply rounded-2xl border border-border/60 bg-card/80 shadow-[0_1px_0_oklch(0_0_0/0.03),0_12px_40px_-24px_oklch(0.35_0.04_20/0.35)];
+  }
+
+  .hover-lift {
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 18px 40px -28px oklch(0.35 0.04 20 / 0.45);
+  }
+
   .shimmer {
     position: relative;
     overflow: hidden;
   }
-  
+
   .shimmer::after {
     content: '';
     position: absolute;
-    top: 0;
-    left: -100%;
+    inset-block: 0;
+    inset-inline-start: -100%;
     width: 100%;
-    height: 100%;
     background: linear-gradient(
       90deg,
       transparent,
-      rgba(255, 255, 255, 0.2),
+      oklch(1 0 0 / 0.22),
       transparent
     );
     animation: shimmer 2s infinite;
   }
-  
+
   @keyframes shimmer {
     100% {
-      left: 100%;
+      inset-inline-start: 100%;
     }
   }
-  
-  .hover-lift {
-    @apply transition-all duration-300;
-  }
-  
-  .hover-lift:hover {
-    @apply -translate-y-1 shadow-lg;
-  }
-  
-  /* Scrollbar styling */
+
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-track {
-    @apply bg-muted rounded-full;
+    @apply rounded-full bg-muted;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-primary/30 rounded-full;
+    @apply rounded-full bg-primary/30;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     @apply bg-primary/50;
   }
-}
 
-/* Animation classes */
-@layer utilities {
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
+  }
+
   .animate-fade-in {
-    animation: fadeIn 0.5s ease-out forwards;
+    animation: fadeIn 0.55s ease-out forwards;
   }
-  
+
   .animate-slide-up {
-    animation: slideUp 0.5s ease-out forwards;
+    animation: slideUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
-  
+
   .animate-slide-in-right {
-    animation: slideInRight 0.3s ease-out forwards;
+    animation: slideInRight 0.35s ease-out forwards;
   }
-  
+
   @keyframes fadeIn {
     from {
       opacity: 0;
@@ -234,8 +282,171 @@
       opacity: 1;
     }
   }
-  
+
   @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .animate-heart-pop {
+    animation: heartPop 0.4s ease-out forwards;
+  }
+
+  @keyframes heartPop {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.3);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .animate-cart-click {
+    animation: cartClick 0.3s ease-out forwards;
+  }
+
+  @keyframes cartClick {
+    0% {
+      transform: scale(1);
+    }
+    30% {
+      transform: scale(0.9);
+    }
+    60% {
+      transform: scale(1.1);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .animate-cart-shake {
+    animation: cartShake 0.4s ease-out;
+  }
+
+  @keyframes cartShake {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-10deg);
+    }
+    50% {
+      transform: rotate(10deg);
+    }
+    75% {
+      transform: rotate(-5deg);
+    }
+  }
+
+  .animate-ripple {
+    animation: ripple 0.6s ease-out forwards;
+  }
+
+  @keyframes ripple {
+    0% {
+      transform: scale(0);
+      opacity: 0.6;
+    }
+    100% {
+      transform: scale(2.5);
+      opacity: 0;
+    }
+  }
+
+  .animate-float-heart {
+    animation: floatHeart 0.8s ease-out forwards;
+  }
+
+  @keyframes floatHeart {
+    0% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-30px) scale(0.5);
+    }
+  }
+
+  .animate-glow {
+    animation: glow 0.5s ease-out;
+  }
+
+  @keyframes glow {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 oklch(0.65 0.15 350 / 0);
+    }
+    50% {
+      box-shadow: 0 0 24px 8px oklch(0.65 0.15 350 / 0.35);
+    }
+  }
+
+  .animate-fly-to-cart {
+    animation: flyToCart 0.6s ease-in forwards;
+  }
+
+  @keyframes flyToCart {
+    0% {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-100px, -200px) scale(0.2);
+    }
+  }
+
+  .login-orb {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(40px);
+    pointer-events: none;
+    z-index: 0;
+    animation: loginOrbFloat 10s ease-in-out infinite;
+  }
+
+  .login-orb-delay {
+    animation-delay: -4s;
+  }
+
+  @keyframes loginOrbFloat {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      transform: translate(12px, -16px) scale(1.06);
+    }
+  }
+
+  .animate-login-card {
+    animation: loginCardIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes loginCardIn {
     from {
       opacity: 0;
       transform: translateY(20px);
@@ -245,138 +456,51 @@
       transform: translateY(0);
     }
   }
-  
-  @keyframes slideInRight {
-    from {
-      opacity: 0;
-      transform: translateX(20px);
-    }
-    to {
-      opacity: 1;
+
+  .animate-login-shake {
+    animation: loginShake 0.45s ease-in-out;
+  }
+
+  @keyframes loginShake {
+    0%,
+    100% {
       transform: translateX(0);
     }
-  }
-  
-  /* Advanced Button Animations */
-  .animate-heart-pop {
-    animation: heartPop 0.4s ease-out forwards;
-  }
-  
-  @keyframes heartPop {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.3); }
-    100% { transform: scale(1); }
-  }
-  
-  .animate-cart-click {
-    animation: cartClick 0.3s ease-out forwards;
-  }
-  
-  @keyframes cartClick {
-    0% { transform: scale(1); }
-    30% { transform: scale(0.9); }
-    60% { transform: scale(1.1); }
-    100% { transform: scale(1); }
-  }
-  
-  .animate-cart-shake {
-    animation: cartShake 0.4s ease-out;
-  }
-  
-  @keyframes cartShake {
-    0%, 100% { transform: rotate(0deg); }
-    25% { transform: rotate(-10deg); }
-    50% { transform: rotate(10deg); }
-    75% { transform: rotate(-5deg); }
-  }
-  
-  .animate-ripple {
-    animation: ripple 0.6s ease-out forwards;
-  }
-  
-  @keyframes ripple {
-    0% { 
-      transform: scale(0);
-      opacity: 0.6;
+    20% {
+      transform: translateX(-6px);
     }
-    100% { 
-      transform: scale(2.5);
-      opacity: 0;
+    40% {
+      transform: translateX(6px);
+    }
+    60% {
+      transform: translateX(-4px);
+    }
+    80% {
+      transform: translateX(4px);
     }
   }
-  
-  .animate-float-heart {
-    animation: floatHeart 0.8s ease-out forwards;
+
+  .login-submit-btn {
+    @apply relative overflow-hidden transition-transform duration-200;
   }
-  
-  @keyframes floatHeart {
-    0% { 
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-    100% { 
-      opacity: 0;
-      transform: translateY(-30px) scale(0.5);
-    }
+
+  .login-submit-btn:not(:disabled):hover {
+    transform: translateY(-1px);
   }
-  
-  .animate-glow {
-    animation: glow 0.5s ease-out;
+
+  .login-submit-btn:not(:disabled):active {
+    transform: scale(0.98);
   }
-  
-  @keyframes glow {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(248, 200, 220, 0); }
-    50% { box-shadow: 0 0 20px 8px rgba(248, 200, 220, 0.6); }
-  }
-  
-  .animate-fly-to-cart {
-    animation: flyToCart 0.6s ease-in forwards;
-  }
-  
-  @keyframes flyToCart {
-    0% { 
-      opacity: 1;
-      transform: translate(0, 0) scale(1);
-    }
-    100% { 
-      opacity: 0;
-      transform: translate(-100px, -200px) scale(0.2);
-    }
-  }
-  
-  /* Button hover states */
+
   .product-action-btn {
     @apply transition-all duration-300 ease-out;
   }
-  
+
   .product-action-btn:hover {
     @apply scale-110 shadow-lg;
   }
-  
+
   .product-action-btn:active {
     @apply scale-95;
-  }
-}
-@layer utilities {
-  /* ... الكود الموجود ... */
-  
-  /* Smooth scroll for RTL */
-  html {
-    scroll-behavior: smooth;
-  }
-  
-  /* Better focus states for accessibility */
-  .focus-ring {
-    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
-  }
-  
-  /* Hide scrollbar but keep functionality */
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
   }
 }

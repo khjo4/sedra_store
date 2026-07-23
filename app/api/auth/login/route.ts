@@ -22,22 +22,30 @@ export async function POST(request: Request) {
       );
     }
 
-    // ✅ إنشاء التوكن
-    const token = await createToken({ id: customer.id, name: customer.name, email: customer.email });
-
-    // ✅ محاولة حفظ الجلسة في cookies (إذا اشتغلت تمام)
-    try {
-      const { setSession } = await import('@/lib/auth');
-      await setSession({ id: customer.id, name: customer.name, email: customer.email });
-    } catch (e) {
-      console.log('Cookie set failed, relying on localStorage:', e);
-    }
-
-    return NextResponse.json({
-      success: true,
-      customer: { id: customer.id, name: customer.name, email: customer.email },
-      token: token,
+    const token = await createToken({
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
     });
+
+    const response = NextResponse.json({
+      success: true,
+      customer: {
+        id: customer.id,
+        name: customer.name,
+        email: customer.email,
+      },
+    });
+
+    response.cookies.set('customer_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    return response;
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(

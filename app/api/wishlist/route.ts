@@ -1,19 +1,21 @@
 import { NextResponse } from 'next/server';
-import { getWishlist, addToWishlist, removeFromWishlist, getProductById } from '@/lib/db';
+import {
+  getWishlist,
+  addToWishlist,
+  removeFromWishlist,
+  getProductById,
+} from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
-// ✅ GET - جلب المفضلة
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url);
-    const customerEmail = searchParams.get('email');
-    
-    if (!customerEmail) {
-      return NextResponse.json({ error: 'البريد الإلكتروني مطلوب' }, { status: 400 });
+    const session = await getSession();
+    if (!session?.email) {
+      // زائر بدون حساب — الواجهة تعتمد على localStorage
+      return NextResponse.json([]);
     }
-    
-    // ✅ استخدام الدالة من db.ts (التي تقوم بتحويل البيانات تلقائياً)
-    const wishlist = await getWishlist(customerEmail);
-    
+
+    const wishlist = await getWishlist(session.email);
     return NextResponse.json(wishlist);
   } catch (error) {
     console.error('Error fetching wishlist:', error);
@@ -24,33 +26,34 @@ export async function GET(request: Request) {
   }
 }
 
-// ✅ POST - إضافة للمفضلة
 export async function POST(request: Request) {
   try {
+    const session = await getSession();
+    if (!session?.email) {
+      // لا نفشل الطلب للزائر — الحفظ محلي
+      return NextResponse.json({ success: true, synced: false }, { status: 200 });
+    }
+
     const body = await request.json();
-    const { customerEmail, productId } = body;
-    
-    // ✅ التحقق من البيانات الأساسية
-    if (!customerEmail || !productId) {
+    const { productId } = body;
+
+    if (!productId) {
       return NextResponse.json(
-        { error: 'البريد الإلكتروني و productId مطلوبان' },
+        { error: 'productId مطلوب' },
         { status: 400 }
       );
     }
-    
-    // ✅ التحقق من وجود المنتج
-    const product = await getProductById(productId);
+
+    const product = await getProductById(String(productId));
     if (!product) {
       return NextResponse.json(
         { error: 'المنتج غير موجود' },
         { status: 404 }
       );
     }
-    
-    // ✅ استخدام الدالة من db.ts (تتعامل مع حالة التكرار تلقائياً)
-    await addToWishlist(customerEmail, productId);
-    
-    return NextResponse.json({ success: true }, { status: 201 });
+
+    await addToWishlist(session.email, String(productId));
+    return NextResponse.json({ success: true, synced: true }, { status: 201 });
   } catch (error) {
     console.error('Error adding to wishlist:', error);
     return NextResponse.json(
@@ -60,24 +63,25 @@ export async function POST(request: Request) {
   }
 }
 
-// ✅ DELETE - حذف من المفضلة
 export async function DELETE(request: Request) {
   try {
+    const session = await getSession();
+    if (!session?.email) {
+      return NextResponse.json({ success: true, synced: false });
+    }
+
     const { searchParams } = new URL(request.url);
-    const customerEmail = searchParams.get('email');
     const productId = searchParams.get('productId');
-    
-    if (!customerEmail || !productId) {
+
+    if (!productId) {
       return NextResponse.json(
-        { error: 'البريد الإلكتروني و productId مطلوبان' },
+        { error: 'productId مطلوب' },
         { status: 400 }
       );
     }
-    
-    // ✅ استخدام الدالة من db.ts
-    await removeFromWishlist(customerEmail, productId);
-    
-    return NextResponse.json({ success: true });
+
+    await removeFromWishlist(session.email, String(productId));
+    return NextResponse.json({ success: true, synced: true });
   } catch (error) {
     console.error('Error removing from wishlist:', error);
     return NextResponse.json(

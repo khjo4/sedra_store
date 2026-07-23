@@ -49,8 +49,10 @@ export async function PUT(
     
     const { id } = await params;
     const body = await request.json();
+    const code = typeof body.code === 'string' ? body.code.trim() : '';
+    const type = body.type;
+    const value = Number(body.value);
     
-    // ✅ 2. التحقق من وجود الكوبون
     const existingCoupon = await getCouponById(id);
     if (!existingCoupon) {
       return NextResponse.json(
@@ -59,31 +61,28 @@ export async function PUT(
       );
     }
     
-    // ✅ 3. التحقق من البيانات الأساسية
-    if (!body.code || !body.type || !body.value) {
+    if (!code || !type || Number.isNaN(value)) {
       return NextResponse.json(
         { error: 'الكود ونوع الخصم والقيمة حقول مطلوبة' },
         { status: 400 }
       );
     }
     
-    // ✅ 4. التحقق من صحة القيم
-    if (body.type === 'percentage' && (body.value <= 0 || body.value > 100)) {
+    if (type === 'percentage' && (value <= 0 || value > 100)) {
       return NextResponse.json(
         { error: 'نسبة الخصم يجب أن تكون بين 1 و 100' },
         { status: 400 }
       );
     }
-    if (body.type === 'fixed' && body.value <= 0) {
+    if (type === 'fixed' && value <= 0) {
       return NextResponse.json(
         { error: 'قيمة الخصم يجب أن تكون أكبر من 0' },
         { status: 400 }
       );
     }
     
-    // ✅ 5. التحقق من عدم وجود كوبون آخر بنفس الكود (باستثناء هذا الكوبون)
     const { getCouponByCode } = await import('@/lib/db');
-    const couponWithSameCode = await getCouponByCode(body.code);
+    const couponWithSameCode = await getCouponByCode(code);
     if (couponWithSameCode && couponWithSameCode.id !== id) {
       return NextResponse.json(
         { error: 'كود الخصم موجود بالفعل' },
@@ -91,10 +90,14 @@ export async function PUT(
       );
     }
     
-    // ✅ 6. استخدام الدالة من db.ts
-    await updateCoupon(id, body);
+    await updateCoupon(id, {
+      ...body,
+      code,
+      type,
+      value,
+      expiresAt: body.expiresAt || null,
+    });
     
-    // ✅ 7. إرجاع الكوبون بعد التحديث
     const updatedCoupon = await getCouponById(id);
     return NextResponse.json({ success: true, coupon: updatedCoupon });
   } catch (error) {

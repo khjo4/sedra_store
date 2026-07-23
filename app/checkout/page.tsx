@@ -34,32 +34,15 @@ import { Footer } from '@/components/layout/footer'
 import { formatPriceAsync, fetchExchangeRate } from '@/lib/utils'
 import type { CartItem, Product, Currency, Coupon } from '@/lib/types'
 import { toast } from 'sonner'
+import {
+  SYRIAN_CITIES_WITH_SHIPPING,
+  getShippingCostByCity,
+} from '@/lib/shipping'
+import { getCart as getLocalCart, clearLocalCart } from '@/lib/cart-wishlist'
 
 interface CartItemWithProduct extends CartItem {
   product: Product
 }
-
-// قائمة المدن مع أسعار الشحن (بالدولار)
-const SYRIAN_CITIES_WITH_SHIPPING = [
-  { name: 'إدلب', shippingCost: 2 },
-  { name: 'دمشق', shippingCost: 3 },
-  { name: 'ريف دمشق', shippingCost: 3 },
-  { name: 'حلب', shippingCost: 3 },
-  { name: 'حمص', shippingCost: 3 },
-  { name: 'حماة', shippingCost: 3 },
-  { name: 'اللاذقية', shippingCost: 3 },
-  { name: 'طرطوس', shippingCost: 3 },
-  { name: 'درعا', shippingCost: 3 },
-  { name: 'دير الزور', shippingCost: 3 },
-  { name: 'الحسكة', shippingCost: 3 },
-  { name: 'الرقة', shippingCost: 3 },
-];
-
-// ✅ دالة لجلب سعر الشحن للمدينة
-const getShippingCostByCity = (cityName: string) => {
-  const city = SYRIAN_CITIES_WITH_SHIPPING.find(c => c.name === cityName);
-  return city?.shippingCost || 2; // القيمة الافتراضية 2$
-};
 
 // طرق الدفع
 type PaymentMethod = {
@@ -91,49 +74,39 @@ const paymentMethods: PaymentMethod[] = [
 // ================================================
 // دوال السلة
 // ================================================
-const CART_KEY = 'sedra_cart'
-
-const getCart = (): CartItem[] => {
-  if (typeof window === 'undefined') return []
-  const cart = localStorage.getItem(CART_KEY)
-  return cart ? JSON.parse(cart) : []
-}
-
-const clearCart = () => {
-  localStorage.removeItem(CART_KEY)
-  window.dispatchEvent(new Event('cartUpdated'))
-}
+const getCart = () => getLocalCart()
+const clearCart = () => clearLocalCart()
 
 // ================================================
 // دوال الكوبونات
 // ================================================
 const validateCouponLocal = async (code: string, subtotal: number): Promise<{ valid: boolean; coupon?: Coupon; error?: string }> => {
   try {
-    const response = await fetch(`/api/coupons?code=${code}`)
+    const response = await fetch(`/api/coupons?code=${encodeURIComponent(code.trim())}`)
+    if (!response.ok) {
+      return { valid: false, error: 'حدث خطأ في التحقق من الكوبون' }
+    }
     const coupons = await response.json()
-    const coupon = coupons.find((c: Coupon) => c.code.toLowerCase() === code.toLowerCase())
+    if (!Array.isArray(coupons)) {
+      return { valid: false, error: 'حدث خطأ في التحقق من الكوبون' }
+    }
+    const coupon = coupons.find((c: Coupon) => c.code.toLowerCase() === code.trim().toLowerCase())
     
     if (!coupon) return { valid: false, error: 'كود الخصم غير صحيح' }
     if (!coupon.active) return { valid: false, error: 'كود الخصم غير مفعل' }
-    if (new Date(coupon.expiresAt) < new Date()) return { valid: false, error: 'كود الخصم منتهي الصلاحية' }
-    if (coupon.usedCount >= coupon.maxUses) return { valid: false, error: 'تم استخدام كود الخصم بالكامل' }
-    if (subtotal < coupon.minPurchase) return { valid: false, error: `الحد الأدنى للشراء ${coupon.minPurchase}$` }
+    if (coupon.expiresAt && new Date(coupon.expiresAt) < new Date()) {
+      return { valid: false, error: 'كود الخصم منتهي الصلاحية' }
+    }
+    if (coupon.maxUses > 0 && coupon.usedCount >= coupon.maxUses) {
+      return { valid: false, error: 'تم استخدام كود الخصم بالكامل' }
+    }
+    if (subtotal < (coupon.minPurchase || 0)) {
+      return { valid: false, error: `الحد الأدنى للشراء ${coupon.minPurchase}$` }
+    }
     
     return { valid: true, coupon }
   } catch (error) {
     return { valid: false, error: 'حدث خطأ في التحقق من الكوبون' }
-  }
-}
-
-const updateCouponUsage = async (code: string) => {
-  try {
-    await fetch('/api/coupons', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
-    })
-  } catch (error) {
-    console.error('Error updating coupon usage:', error)
   }
 }
 
@@ -189,6 +162,25 @@ function CheckoutContent() {
       .catch(err => console.error('Error fetching settings:', err))
   }, [])
 
+  // تعبئة بيانات العميل المسجّل تلقائياً لربط الطلبات بحسابه
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const user = data?.user
+        if (!user) return
+        setFormData((prev) => ({
+          ...prev,
+          customerName: prev.customerName || user.name || '',
+          customerEmail: prev.customerEmail || user.email || '',
+          customerPhone: prev.customerPhone || user.phone || '',
+          address: prev.address || user.address || '',
+          city: prev.city || user.city || '',
+        }))
+      })
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     const loadCurrency = async () => {
       const savedCurrency = localStorage.getItem('sedra_currency')
@@ -223,17 +215,21 @@ function CheckoutContent() {
   }, [appliedCoupon, subtotal])
 
 // ================================================
-// 4. القيم المحسوبة (يجب أن تكون قبل الـ useEffect التي تستخدمها)
+// 4. القيم المحسوبة — شحن حسب المحافظة + حد مجاني من الإعدادات
 // ================================================
-const freeShippingThreshold = settings?.free_shipping_threshold || 70
+const freeShippingThreshold = Number(
+  settings?.freeShippingThreshold ?? settings?.free_shipping_threshold ?? 0
+)
 
-// ✅ حساب الشحن حسب المدينة
 const shippingCost = useMemo(() => {
-  if (subtotal - discount >= freeShippingThreshold) {
-    return 0;
+  if (
+    freeShippingThreshold > 0 &&
+    subtotal - discount >= freeShippingThreshold
+  ) {
+    return 0
   }
-  return getShippingCostByCity(formData.city || '');
-}, [formData.city, subtotal, discount, freeShippingThreshold]);
+  return getShippingCostByCity(formData.city || '')
+}, [formData.city, subtotal, discount, freeShippingThreshold])
 
 const total = subtotal - discount + shippingCost
 const selectedPaymentMethod = paymentMethods.find(m => m.id === selectedPayment)
@@ -324,12 +320,16 @@ const selectedPaymentMethod = paymentMethods.find(m => m.id === selectedPayment)
         setFormattedCouponValue(couponFormatted)
       }
       
-      if (shippingCost > 0) {
+      if (shippingCost > 0 && freeShippingThreshold > 0) {
         const remaining = freeShippingThreshold - (subtotal - discount)
         if (remaining > 0) {
           const remainingFormatted = await formatPriceAsync(remaining, currency)
           setFormattedShippingRemaining(remainingFormatted)
+        } else {
+          setFormattedShippingRemaining('')
         }
+      } else {
+        setFormattedShippingRemaining('')
       }
       
       const prices: Record<string, string> = {}
@@ -358,7 +358,6 @@ const selectedPaymentMethod = paymentMethods.find(m => m.id === selectedPayment)
     const result = await validateCouponLocal(couponCode, subtotal)
     
     if (result.valid && result.coupon) {
-      await updateCouponUsage(couponCode)
       setAppliedCoupon(result.coupon)
       toast.success(`تم تطبيق الكوبون ${couponCode} بنجاح!`)
     } else {
@@ -384,9 +383,10 @@ const selectedPaymentMethod = paymentMethods.find(m => m.id === selectedPayment)
     } else if (!/^[\d\s+()-]{9,}$/.test(formData.customerPhone)) {
       newErrors.customerPhone = 'رقم هاتف غير صحيح'
     }
-    if (!formData.customerEmail.trim()) {
-    newErrors.customerEmail = 'البريد الإلكتروني مطلوب'
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customerEmail)) {
+    if (
+      formData.customerEmail.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customerEmail.trim())
+    ) {
       newErrors.customerEmail = 'بريد إلكتروني غير صحيح'
     }
     if (!formData.address.trim()) {
@@ -431,17 +431,11 @@ const selectedPaymentMethod = paymentMethods.find(m => m.id === selectedPayment)
       }))
 
       const orderData = {
-        id: `ORD-${Math.floor(Math.random() * 1000)}`,
         customerName: formData.customerName,
         customerEmail: formData.customerEmail || '',
         customerPhone: formData.customerPhone,
         address: formData.address,
         city: formData.city,
-        subtotal: subtotal,
-        discount: discount,
-        shipping: shippingCost,
-        total: total,
-        status: 'pending',
         paymentMethod: selectedPayment,
         couponCode: appliedCoupon?.code || null,
         notes: notes,
@@ -460,6 +454,11 @@ const selectedPaymentMethod = paymentMethods.find(m => m.id === selectedPayment)
         throw new Error(result.error || 'Failed to create order')
       }
 
+      const createdOrderId = result.id || result.order?.id
+      if (!createdOrderId) {
+        throw new Error('لم يتم إرجاع رقم الطلب من الخادم')
+      }
+
       clearCart()
       window.dispatchEvent(new Event('cartUpdated'))
 
@@ -467,7 +466,7 @@ const selectedPaymentMethod = paymentMethods.find(m => m.id === selectedPayment)
         // تنسيق المجموع للرسالة (إزالة الرموز)
         const totalAmount = formattedTotal.replace('$', '').replace('ل.س', '').trim()
         
-        const whatsappMessage = `مرحباً،\n\nأود تأكيد طلبي رقم ${orderData.id}:\n\n` +
+        const whatsappMessage = `مرحباً،\n\nأود تأكيد طلبي رقم ${createdOrderId}:\n\n` +
           `الاسم: ${orderData.customerName}\n` +
           `الهاتف: ${orderData.customerPhone}\n` +
           `العنوان: ${orderData.address}، ${orderData.city}\n\n` +
@@ -482,7 +481,7 @@ const selectedPaymentMethod = paymentMethods.find(m => m.id === selectedPayment)
         window.open(whatsappUrl, '_blank')
       }
 
-      setOrderId(orderData.id)
+      setOrderId(createdOrderId)
       setOrderComplete(true)
       
     } catch (error) {
@@ -631,7 +630,10 @@ const selectedPaymentMethod = paymentMethods.find(m => m.id === selectedPayment)
                     </div>
 
                     <div>
-                      <Label htmlFor="email" className="mb-2 block">البريد الإلكتروني*</Label>
+                      <Label htmlFor="email" className="mb-2 block">
+                        البريد الإلكتروني{' '}
+                        <span className="font-normal text-muted-foreground">(اختياري)</span>
+                      </Label>
                       <Input
                         id="email"
                         type="email"
@@ -639,6 +641,7 @@ const selectedPaymentMethod = paymentMethods.find(m => m.id === selectedPayment)
                         value={formData.customerEmail}
                         onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
                         className={errors.customerEmail ? 'border-destructive' : ''}
+                        placeholder="example@email.com"
                       />
                       {errors.customerEmail && (
                         <p className="text-sm text-destructive mt-1">{errors.customerEmail}</p>
@@ -819,7 +822,13 @@ const selectedPaymentMethod = paymentMethods.find(m => m.id === selectedPayment)
               <SelectItem key={city.name} value={city.name}>
                 <div className="flex justify-between w-full items-center gap-4">
                   <span>{city.name}</span>
-                  <span className={`text-sm ${city.shippingCost === 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                  <span
+                    className={`text-sm ${
+                      city.shippingCost === 0
+                        ? 'text-green-600'
+                        : 'text-muted-foreground'
+                    }`}
+                  >
                     ${city.shippingCost}
                   </span>
                 </div>

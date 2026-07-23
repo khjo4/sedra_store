@@ -52,7 +52,7 @@ export async function getAllProducts() {
   const rows = await query('SELECT * FROM products ORDER BY created_at DESC');
   
   return (rows as any[]).map(product => ({
-    id: product.id,
+    id: String(product.id),
     name: product.name,
     nameEn: product.name_en,
     description: product.description,
@@ -79,7 +79,7 @@ export async function getProductById(id: string) {
   if (!product) return null;
   
   return {
-    id: product.id,
+    id: String(product.id),
     name: product.name,
     nameEn: product.name_en,
     description: product.description,
@@ -101,11 +101,15 @@ export async function getProductById(id: string) {
 }
 
 export async function getProductsByIds(ids: string[]) {
-  if (ids.length === 0) return [];
-  const placeholders = ids.map(() => '?').join(',');
-  const rows = await query(`SELECT * FROM products WHERE id IN (${placeholders})`, ids);
-  return (rows as any[]).map(product => ({
-    id: product.id,
+  const cleanIds = [...new Set(ids.map((id) => String(id).trim()).filter(Boolean))];
+  if (cleanIds.length === 0) return [];
+  const placeholders = cleanIds.map(() => '?').join(',');
+  const rows = await query(
+    `SELECT * FROM products WHERE id IN (${placeholders})`,
+    cleanIds
+  );
+  return (rows as any[]).map((product) => ({
+    id: String(product.id),
     name: product.name,
     nameEn: product.name_en,
     description: product.description,
@@ -241,7 +245,7 @@ export async function getAllOrders() {
   const rows = await query('SELECT * FROM orders ORDER BY created_at DESC');
   
   return (rows as any[]).map(order => ({
-    id: order.id,
+    id: String(order.id),
     customerName: order.customer_name,
     customerEmail: order.customer_email,
     customerPhone: order.customer_phone,
@@ -267,7 +271,7 @@ export async function getOrderById(id: string) {
   if (!order) return null;
   
   return {
-    id: order.id,
+    id: String(order.id),
     customerName: order.customer_name,
     customerEmail: order.customer_email,
     customerPhone: order.customer_phone,
@@ -288,18 +292,15 @@ export async function getOrderById(id: string) {
 }
 
 export async function createOrder(orderData: any) {
-  const id = orderData.id || `ORD-${randomUUID().slice(0, 8)}`;
-  
-  await query(
+  const result: any = await query(
     `INSERT INTO orders 
-      (id, customer_name, customer_email, customer_phone, address, city, 
+      (customer_name, customer_email, customer_phone, address, city, 
        subtotal, discount, shipping, total, status, payment_method, 
        coupon_code, notes, items)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      id,
       orderData.customerName,
-      orderData.customerEmail || null,
+      orderData.customerEmail?.trim() || '',
       orderData.customerPhone,
       orderData.address,
       orderData.city,
@@ -315,7 +316,176 @@ export async function createOrder(orderData: any) {
     ]
   );
   
-  return { id, ...orderData };
+  return { id: String(result.insertId), ...orderData };
+}
+
+/**
+ * Create order with server-side price calculation, stock locks, and coupon increment.
+ * Client-supplied prices are ignored.
+ */
+export async function createOrderSecure(input: {
+  customerName: string;
+  customerEmail?: string | null;
+  customerPhone: string;
+  address: string;
+  city: string;
+  notes?: string | null;
+  paymentMethod?: string;
+  couponCode?: string | null;
+  items: Array<{
+    productId: string;
+    quantity: number;
+    selectedColor?: string | null;
+    selectedSize?: string | null;
+  }>;
+}) {
+  if (!input.items?.length) {
+    throw new Error('الطلب يجب أن يحتوي على منتجات');
+  }
+
+  const pool = getPool();
+  const conn = await pool.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const orderItems: any[] = [];
+    let subtotal = 0;
+
+    for (const item of input.items) {
+      const qty = Number(item.quantity) || 0;
+      if (qty <= 0) {
+        throw new Error('كمية غير صالحة');
+      }
+
+      const [rows] = await conn.execute(
+        'SELECT id, name, price, stock, images FROM products WHERE id = ? FOR UPDATE',
+        [item.productId]
+      );
+      const product = (rows as any[])[0];
+      if (!product) {
+        throw new Error(`المنتج غير موجود: ${item.productId}`);
+      }
+      if (Number(product.stock) < qty) {
+        throw new Error(
+          `المنتج ${product.name} غير متوفر بالكمية المطلوبة. المتوفر: ${product.stock}`
+        );
+      }
+
+      const unitPrice = Number(product.price);
+      subtotal += unitPrice * qty;
+
+      const [updateResult] = await conn.execute(
+        'UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?',
+        [qty, item.productId, qty]
+      );
+      if ((updateResult as any).affectedRows !== 1) {
+        throw new Error(`فشل تحديث مخزون المنتج: ${product.name}`);
+      }
+
+      orderItems.push({
+        productId: product.id,
+        name: product.name,
+        quantity: qty,
+        price: unitPrice,
+        selectedColor: item.selectedColor || null,
+        selectedSize: item.selectedSize || null,
+        images: parseJSONSafe(product.images, []),
+      });
+    }
+
+    let discount = 0;
+    let couponCode: string | null = null;
+
+    if (input.couponCode) {
+      const [couponRows] = await conn.execute(
+        'SELECT * FROM coupons WHERE code = ? FOR UPDATE',
+        [input.couponCode.toUpperCase()]
+      );
+      const coupon = (couponRows as any[])[0];
+      if (!coupon || !coupon.active) {
+        throw new Error('كود الخصم غير صالح');
+      }
+      if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+        throw new Error('كود الخصم منتهي الصلاحية');
+      }
+      if (Number(coupon.used_count) >= Number(coupon.max_uses)) {
+        throw new Error('تم استخدام كود الخصم بالكامل');
+      }
+      if (subtotal < Number(coupon.min_purchase)) {
+        throw new Error(`الحد الأدنى للشراء ${coupon.min_purchase}`);
+      }
+
+      if (coupon.type === 'percentage') {
+        discount = (subtotal * Number(coupon.value)) / 100;
+      } else {
+        discount = Number(coupon.value);
+      }
+      discount = Math.min(discount, subtotal);
+      couponCode = coupon.code;
+
+      await conn.execute(
+        'UPDATE coupons SET used_count = used_count + 1 WHERE id = ?',
+        [coupon.id]
+      );
+    }
+
+    const [settingsRows] = await conn.execute(
+      'SELECT free_shipping_threshold FROM settings WHERE id = 1'
+    );
+    const settings = (settingsRows as any[])[0];
+    const freeThreshold = Number(settings?.free_shipping_threshold ?? 0);
+    const { calculateShipping } = await import('@/lib/shipping');
+    const shipping = calculateShipping({
+      city: input.city,
+      subtotal,
+      discount,
+      freeShippingThreshold: freeThreshold,
+    });
+    const total = Math.max(0, subtotal - discount + shipping);
+
+    // الجدول AUTO_INCREMENT — لا نُدرج id يدوياً
+    const [insertResult] = await conn.execute(
+      `INSERT INTO orders 
+        (customer_name, customer_email, customer_phone, address, city, 
+         subtotal, discount, shipping, total, status, payment_method, 
+         coupon_code, notes, items)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        input.customerName,
+        input.customerEmail?.trim() || '',
+        input.customerPhone,
+        input.address,
+        input.city,
+        subtotal,
+        discount,
+        shipping,
+        total,
+        'pending',
+        input.paymentMethod || 'cod',
+        couponCode,
+        input.notes || null,
+        JSON.stringify(orderItems),
+      ]
+    );
+    const id = String((insertResult as any).insertId);
+
+    await conn.commit();
+    return {
+      id,
+      subtotal,
+      discount,
+      shipping,
+      total,
+      couponCode,
+      items: orderItems,
+    };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 }
 
 export async function updateOrderStatus(id: string, status: string) {
@@ -435,97 +605,317 @@ export async function incrementCouponUsage(code: string) {
 // العملاء (Customers)
 // ================================================
 
-export async function getAllCustomers() {
-  const rows = await query('SELECT * FROM customers ORDER BY created_at DESC');
-  
-  return (rows as any[]).map(customer => ({
-    id: customer.id,
-    name: customer.name,
-    email: customer.email,
-    phone: customer.phone,
-    address: customer.address,
-    city: customer.city,
-    ordersCount: Number(customer.orders_count),
-    totalSpent: Number(customer.total_spent),
-    createdAt: customer.created_at,
-  }));
-}
-
-export async function getCustomerByEmail(email: string) {
-  const rows = await query('SELECT * FROM customers WHERE email = ?', [email]);
-  const customer = (rows as any[])[0];
-  if (!customer) return null;
-  
+function mapCustomerRow(customer: any) {
   return {
-    id: customer.id,
+    id: String(customer.id),
     name: customer.name,
-    email: customer.email,
-    phone: customer.phone,
-    address: customer.address,
-    city: customer.city,
-    ordersCount: Number(customer.orders_count),
-    totalSpent: Number(customer.total_spent),
+    email: customer.email || '',
+    phone: customer.phone || '',
+    address: customer.address || '',
+    city: customer.city || '',
+    ordersCount: Number(customer.orders_count || 0),
+    totalSpent: Number(customer.total_spent || 0),
     createdAt: customer.created_at,
   };
 }
 
+/** أنشئ سجلات عملاء مفقودة من الطلبات (ضيوف بدون حساب) */
+async function ensureGuestCustomersFromOrders() {
+  // نظّف البريد/الهاتف الفارغ حتى لا يمنع UNIQUE إضافة ضيوف جدد
+  await query(
+    `UPDATE customers SET email = NULL WHERE email IS NOT NULL AND TRIM(email) = ''`
+  ).catch(() => {});
+  await query(
+    `UPDATE customers SET phone = NULL WHERE phone IS NOT NULL AND TRIM(phone) = ''`
+  ).catch(() => {});
+
+  const { orderBelongsToCustomer, normalizePhone } = await import(
+    '@/lib/customer-match'
+  );
+  const orders = await getAllOrders();
+  const rows = (await query('SELECT * FROM customers')) as any[];
+
+  for (const order of orders) {
+    const hasMatch = rows.some((c) =>
+      orderBelongsToCustomer(
+        {
+          customerPhone: order.customerPhone,
+          customerEmail: order.customerEmail,
+          customerName: order.customerName,
+          city: order.city,
+        },
+        {
+          phone: c.phone,
+          email: c.email,
+          name: c.name,
+          city: c.city,
+        }
+      )
+    );
+    if (hasMatch) continue;
+
+    const phone = String(order.customerPhone || '').trim();
+    const email = String(order.customerEmail || '').trim();
+    if (!normalizePhone(phone) && !email) continue;
+
+    try {
+      const created = await createOrUpdateCustomer({
+        name: order.customerName || 'عميل',
+        email: email || null,
+        phone: phone || null,
+        address: order.address || null,
+        city: order.city || null,
+      });
+      if (created?.id) {
+        rows.push({
+          id: created.id,
+          name: created.name,
+          email: created.email,
+          phone: created.phone,
+          city: order.city,
+        });
+      }
+    } catch (err) {
+      console.error('ensureGuestCustomersFromOrders:', order.id, err);
+    }
+  }
+}
+
+export async function getAllCustomers() {
+  // املأ أي مشترٍ ضيف ظهر في الطلبات ولم يُحفظ كعميل
+  await ensureGuestCustomersFromOrders();
+
+  const rows = (await query(
+    'SELECT * FROM customers ORDER BY created_at DESC'
+  )) as any[];
+  const orders = await getAllOrders();
+  const { orderBelongsToCustomer } = await import('@/lib/customer-match');
+
+  return rows.map((customer) => {
+    const base = mapCustomerRow(customer);
+
+    const matchedOrders = orders.filter((order) =>
+      orderBelongsToCustomer(
+        {
+          customerPhone: order.customerPhone,
+          customerEmail: order.customerEmail,
+          customerName: order.customerName,
+          city: order.city,
+        },
+        base
+      )
+    );
+    const liveCount = matchedOrders.length;
+    const liveSpent = matchedOrders.reduce(
+      (sum, o) => sum + Number(o.total || 0),
+      0
+    );
+
+    if (
+      liveCount !== base.ordersCount ||
+      liveSpent !== base.totalSpent
+    ) {
+      query(
+        'UPDATE customers SET orders_count = ?, total_spent = ? WHERE id = ?',
+        [liveCount, liveSpent, customer.id]
+      ).catch(() => {});
+    }
+
+    return {
+      ...base,
+      ordersCount: liveCount,
+      totalSpent: liveSpent,
+    };
+  });
+}
+
+export async function getCustomerByEmail(email: string) {
+  if (!email?.trim()) return null;
+  const rows = await query('SELECT * FROM customers WHERE email = ?', [
+    email.trim().toLowerCase(),
+  ]);
+  const customer = (rows as any[])[0];
+  if (!customer) return null;
+  return mapCustomerRow(customer);
+}
+
 export async function createOrUpdateCustomer(customerData: any) {
-  const email = customerData.email?.trim();
-  const phone = customerData.phone?.trim();
-  
-  // ✅ إذا ما في إيميل ولا هاتف، نخرج
-  if (!email && !phone) {
-    console.log('⚠️ No email or phone provided');
+  const email = String(customerData.email || '')
+    .trim()
+    .toLowerCase();
+  const phoneRaw = String(customerData.phone || '').trim();
+  const { normalizePhone, phonesMatch } = await import('@/lib/customer-match');
+  const phoneDigits = normalizePhone(phoneRaw);
+
+  if (!customerData.id && !email && !phoneDigits) {
     return null;
   }
-  
-  let existing = null;
-  
-  // ✅ البحث بالإيميل
-  if (email) {
+
+  let existing = null as any;
+
+  if (customerData.id) {
+    existing = await getCustomerById(String(customerData.id));
+  }
+
+  if (!existing && email) {
     existing = await getCustomerByEmail(email);
   }
-  
-  // ✅ إذا ما لقينا، جرب بالهاتف
-  if (!existing && phone) {
-    const rows = await query('SELECT * FROM customers WHERE phone = ?', [phone]);
-    existing = (rows as any[])[0] || null;
+
+  if (!existing && phoneDigits) {
+    const rows = (await query(
+      `SELECT * FROM customers
+       WHERE phone IS NOT NULL AND TRIM(phone) != ''`
+    )) as any[];
+    existing =
+      rows.find((row) => phonesMatch(row.phone, phoneRaw)) || null;
   }
-  
+
+  const syncStats = async (
+    customerId: string,
+    customerPhone: string,
+    customerEmail: string,
+    customerName: string,
+    customerCity: string
+  ) => {
+    const { orderBelongsToCustomer: belongs } = await import(
+      '@/lib/customer-match'
+    );
+    const orders = await getAllOrders();
+    const matched = orders.filter((o) =>
+      belongs(
+        {
+          customerPhone: o.customerPhone,
+          customerEmail: o.customerEmail,
+          customerName: o.customerName,
+          city: o.city,
+        },
+        {
+          phone: customerPhone,
+          email: customerEmail,
+          name: customerName,
+          city: customerCity,
+        }
+      )
+    );
+    const ordersCount = matched.length;
+    const totalSpent = matched.reduce((s, o) => s + Number(o.total || 0), 0);
+    await query(
+      'UPDATE customers SET orders_count = ?, total_spent = ? WHERE id = ?',
+      [ordersCount, totalSpent, customerId]
+    );
+    return { ordersCount, totalSpent };
+  };
+
   if (existing) {
-    // ✅ زيادة orders_count و total_spent
-    const newOrdersCount = existing.orders_count + 1;
-    const newTotalSpent = (existing.total_spent || 0) + (customerData.totalSpent || 0);
-    
+    const existingId = existing.id;
+    const nextPhone = phoneRaw || existing.phone || '';
+    const nextEmail = email || existing.email || '';
+    const nextName = customerData.name || existing.name || '';
+    const nextCity = customerData.city || existing.city || '';
+
     await query(
       `UPDATE customers 
-       SET orders_count = ?, total_spent = ? 
+       SET name = ?, 
+           phone = COALESCE(NULLIF(?, ''), phone),
+           address = COALESCE(?, address),
+           city = COALESCE(?, city),
+           email = CASE WHEN ? != '' THEN ? ELSE email END
        WHERE id = ?`,
-      [newOrdersCount, newTotalSpent, existing.id]
-    );
-    
-    console.log(`✅ Customer ${existing.id} updated: orders=${newOrdersCount}, spent=${newTotalSpent}`);
-    return existing;
-  } else {
-    // ✅ إنشاء عميل جديد
-    const id = `CUST-${randomUUID().slice(0, 8)}`;
-    await query(
-      `INSERT INTO customers 
-        (id, name, email, phone, address, city, orders_count, total_spent)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        id,
-        customerData.name,
-        email || null,
-        phone || null,
+        nextName,
+        phoneRaw,
         customerData.address || null,
         customerData.city || null,
-        1,
-        customerData.totalSpent || 0
+        email,
+        email,
+        existingId,
       ]
     );
-    console.log(`✅ New customer created: ${id}`);
-    return { id, ...customerData };
+
+    const stats = await syncStats(
+      existingId,
+      nextPhone,
+      nextEmail,
+      nextName,
+      nextCity
+    );
+    return {
+      id: existingId,
+      name: nextName,
+      email: nextEmail,
+      phone: nextPhone,
+      ...stats,
+    };
+  }
+
+  // لا نُدرج id يدوياً — الجدول AUTO_INCREMENT رقمي
+  try {
+    const result: any = await query(
+      `INSERT INTO customers 
+        (name, email, phone, address, city, orders_count, total_spent)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        customerData.name || 'عميل',
+        email || null,
+        phoneRaw || null,
+        customerData.address || null,
+        customerData.city || null,
+        0,
+        0,
+      ]
+    );
+    const newId = String(result.insertId);
+
+    const stats = await syncStats(
+      newId,
+      phoneRaw,
+      email,
+      customerData.name || 'عميل',
+      customerData.city || ''
+    );
+    return {
+      id: newId,
+      name: customerData.name || 'عميل',
+      email,
+      phone: phoneRaw,
+      ...stats,
+    };
+  } catch (insertError: any) {
+    // إن فشل الإدراج بسبب تكرار، أعد المحاولة كتحديث بعد البحث
+    console.error(
+      'createOrUpdateCustomer insert failed, retrying match:',
+      insertError?.message || insertError
+    );
+    if (email) {
+      existing = await getCustomerByEmail(email);
+    }
+    if (!existing && phoneDigits) {
+      const rows = (await query(
+        `SELECT * FROM customers WHERE phone IS NOT NULL AND TRIM(phone) != ''`
+      )) as any[];
+      existing =
+        rows.find((row) => phonesMatch(row.phone, phoneRaw)) || null;
+    }
+    if (existing) {
+      return createOrUpdateCustomer({
+        ...customerData,
+        id: existing.id,
+      });
+    }
+    // إن كان البريد NOT NULL في مخطط قديم: استخدم بريداً فريداً للضيف
+    if (
+      !email &&
+      (String(insertError?.message || '').includes('email') ||
+        insertError?.code === 'ER_BAD_NULL_ERROR' ||
+        insertError?.errno === 1048)
+    ) {
+      const fallbackEmail = `guest-${phoneDigits || randomUUID().slice(0, 8)}@sedra.local`;
+      return createOrUpdateCustomer({
+        ...customerData,
+        email: fallbackEmail,
+      });
+    }
+    throw insertError;
   }
 }
 
@@ -637,27 +1027,66 @@ export async function getCart(sessionId: string) {
 }
 
 export async function addToCart(item: any) {
+  const productId = String(item.productId);
   const existing = await query(
     `SELECT * FROM cart WHERE session_id = ? AND product_id = ? 
      AND (selected_color = ? OR (selected_color IS NULL AND ? IS NULL))
      AND (selected_size = ? OR (selected_size IS NULL AND ? IS NULL))`,
-    [item.sessionId, item.productId, item.selectedColor || null, item.selectedColor || null, item.selectedSize || null, item.selectedSize || null]
+    [
+      item.sessionId,
+      productId,
+      item.selectedColor || null,
+      item.selectedColor || null,
+      item.selectedSize || null,
+      item.selectedSize || null,
+    ]
   );
-  
+
   if ((existing as any[]).length > 0) {
     await query(
       `UPDATE cart SET quantity = quantity + ? 
        WHERE session_id = ? AND product_id = ? 
        AND (selected_color = ? OR (selected_color IS NULL AND ? IS NULL))
        AND (selected_size = ? OR (selected_size IS NULL AND ? IS NULL))`,
-      [item.quantity || 1, item.sessionId, item.productId, item.selectedColor || null, item.selectedColor || null, item.selectedSize || null, item.selectedSize || null]
+      [
+        item.quantity || 1,
+        item.sessionId,
+        productId,
+        item.selectedColor || null,
+        item.selectedColor || null,
+        item.selectedSize || null,
+        item.selectedSize || null,
+      ]
     );
-  } else {
+    return;
+  }
+
+  try {
+    await query(
+      `INSERT INTO cart (session_id, product_id, quantity, selected_color, selected_size)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        item.sessionId,
+        productId,
+        item.quantity || 1,
+        item.selectedColor || null,
+        item.selectedSize || null,
+      ]
+    );
+  } catch {
+    // بعض المخططات تتطلب عمود id يدوياً
     const id = `CART-${randomUUID().slice(0, 8)}`;
     await query(
       `INSERT INTO cart (id, session_id, product_id, quantity, selected_color, selected_size)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, item.sessionId, item.productId, item.quantity || 1, item.selectedColor || null, item.selectedSize || null]
+      [
+        id,
+        item.sessionId,
+        productId,
+        item.quantity || 1,
+        item.selectedColor || null,
+        item.selectedSize || null,
+      ]
     );
   }
 }
@@ -768,16 +1197,15 @@ export async function registerCustomer(data: {
 
   // تشفير كلمة المرور
   const hashedPassword = await bcrypt.hash(data.password, 10);
-  const id = `CUST-${randomUUID().slice(0, 8)}`;
 
-  await query(
-    `INSERT INTO customers (id, name, email, phone, password)
-     VALUES (?, ?, ?, ?, ?)`,
-    [id, data.name, data.email.toLowerCase(), data.phone || null, hashedPassword]
+  const result: any = await query(
+    `INSERT INTO customers (name, email, phone, password)
+     VALUES (?, ?, ?, ?)`,
+    [data.name, data.email.toLowerCase(), data.phone || null, hashedPassword]
   );
 
   return {
-    id,
+    id: String(result.insertId),
     name: data.name,
     email: data.email.toLowerCase(),
     phone: data.phone,

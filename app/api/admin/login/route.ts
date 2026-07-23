@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/db';
+import { createAdminToken } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -12,7 +13,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const admin = await verifyAdmin(email, password);    
+    const admin = await verifyAdmin(email, password);
     if (!admin) {
       return NextResponse.json(
         { error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' },
@@ -20,18 +21,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // ✅ تخزين التوكن في cookie
+    const token = await createAdminToken({
+      id: admin.id,
+      name: admin.name,
+      email: admin.email,
+    });
+
     const response = NextResponse.json(
-      { success: true, admin: { id: admin.id, name: admin.name, email: admin.email } },
+      {
+        success: true,
+        admin: { id: admin.id, name: admin.name, email: admin.email },
+      },
       { status: 200 }
     );
 
-    response.cookies.set('admin_token', 'logged_in', {
+    response.cookies.set('admin_token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 * 7, // 7 أيام
+      maxAge: 60 * 60 * 24 * 7,
     });
 
     return response;

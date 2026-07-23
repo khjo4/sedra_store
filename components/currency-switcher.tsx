@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getSettings, updateSettings } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -12,12 +11,14 @@ import {
 import { DollarSign } from "lucide-react"
 import type { Currency } from "@/lib/types"
 
+const CURRENCY_KEY = "sedra_currency"
+
 export function CurrencySwitcher() {
   const [currency, setCurrency] = useState<Currency>("USD")
 
   useEffect(() => {
-    const settings = getSettings()
-    setCurrency(settings.currency)
+    const saved = localStorage.getItem(CURRENCY_KEY)
+    setCurrency(saved === "SYP" ? "SYP" : "USD")
   }, [])
 
   const currencies = [
@@ -29,9 +30,8 @@ export function CurrencySwitcher() {
 
   const handleCurrencyChange = (newCurrency: Currency) => {
     setCurrency(newCurrency)
-    updateSettings({ currency: newCurrency })
-    // Trigger page refresh for price updates
-    window.location.reload()
+    localStorage.setItem(CURRENCY_KEY, newCurrency)
+    window.dispatchEvent(new Event("currencyChanged"))
   }
 
   return (
@@ -50,7 +50,7 @@ export function CurrencySwitcher() {
             onClick={() => handleCurrencyChange(c.code)}
             className={currency === c.code ? "bg-primary/10" : ""}
           >
-            <span className="ml-2 font-medium">{c.symbol}</span>
+            <span className="ms-2 font-medium">{c.symbol}</span>
             {c.label}
           </DropdownMenuItem>
         ))}

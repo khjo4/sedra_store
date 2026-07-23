@@ -1,57 +1,65 @@
-import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import {
+  createToken,
+  verifyToken,
+  createAdminToken,
+  verifyAdminToken,
+  type SessionUser,
+  type AdminSession,
+} from '@/lib/auth-jwt';
 
-const secretKey = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'fallback-secret-key-minimum-32-characters-long'
-);
+export type { SessionUser, AdminSession };
+export {
+  createToken,
+  verifyToken,
+  createAdminToken,
+  verifyAdminToken,
+};
 
-export interface SessionUser {
-  id: string;
-  name: string;
-  email: string;
-}
-
-export async function createToken(user: SessionUser): Promise<string> {
-  const token = await new SignJWT({ userId: user.id, email: user.email, name: user.name })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('7d')
-    .sign(secretKey);
-  return token;
-}
-
-export async function verifyToken(token: string): Promise<SessionUser | null> {
-  try {
-    const { payload } = await jwtVerify(token, secretKey);
-    return {
-      id: payload.userId as string,
-      email: payload.email as string,
-      name: payload.name as string,
-    };
-  } catch {
-    return null;
-  }
-}
+const COOKIE_OPTS = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: 60 * 60 * 24 * 7,
+};
 
 export async function getSession(): Promise<SessionUser | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('customer_token')?.value;
+  const token = (await cookies()).get('customer_token')?.value;
   if (!token) return null;
   return verifyToken(token);
 }
 
 export async function setSession(user: SessionUser) {
   const token = await createToken(user);
-  const isProduction = process.env.NODE_ENV === 'production';
-  
   (await cookies()).set('customer_token', token, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7,
-    path: '/',
+    ...COOKIE_OPTS,
+    secure: process.env.NODE_ENV === 'production',
   });
 }
 
 export async function clearSession() {
   (await cookies()).delete('customer_token');
+}
+
+export async function getAdminSession(): Promise<AdminSession | null> {
+  const token = (await cookies()).get('admin_token')?.value;
+  if (!token) return null;
+  return verifyAdminToken(token);
+}
+
+export async function setAdminSession(admin: {
+  id: string;
+  name: string;
+  email: string;
+}) {
+  const token = await createAdminToken(admin);
+  (await cookies()).set('admin_token', token, {
+    ...COOKIE_OPTS,
+    secure: process.env.NODE_ENV === 'production',
+  });
+  return token;
+}
+
+export async function clearAdminSession() {
+  (await cookies()).delete('admin_token');
 }

@@ -19,10 +19,15 @@ export async function GET(request: Request) {
     
     // ✅ إذا طلب المنتجات بمعرفات محددة (للمفضلة أو السلة)
     if (ids) {
-      const idsArray = ids.split(',');
+      const idsArray = ids
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
       const { getProductsByIds } = await import('@/lib/db');
       const products = await getProductsByIds(idsArray);
-      return NextResponse.json(products);
+      const response = NextResponse.json(products);
+      response.headers.set('Cache-Control', 'private, no-store, max-age=0');
+      return response;
     }
     
     // جلب جميع المنتجات (مؤقتاً - سنحسنها لاحقاً)
@@ -95,18 +100,12 @@ export async function GET(request: Request) {
   }
 }
 
-// POST - إضافة منتج جديد (للمدير فقط)
+// POST - إضافة منتج جديد (للمدير فقط — الحماية عبر middleware)
 export async function POST(request: Request) {
   try {
-    // ✅ التحقق من صلاحية المدير (مؤقتاً)
-    const authHeader = request.headers.get('authorization');
-    // مؤقتاً: نسمح فقط إذا كان هناك token
-    // في المرحلة القادمة سنضيف middleware
-    
     const body = await request.json();
     
-    // ✅ التحقق من البيانات الأساسية
-    if (!body.name || !body.price || !body.category) {
+    if (!body.name || body.price == null || !body.category) {
       return NextResponse.json(
         { error: 'الاسم والسعر والقسم حقول مطلوبة' },
         { status: 400 }
@@ -115,7 +114,6 @@ export async function POST(request: Request) {
     
     const newProduct = await createProduct(body);
     
-    // 🔄 إعادة التحقق من الـ Cache عند إضافة منتج جديد
     revalidateTag('/', 'layout');
     
     return NextResponse.json(newProduct, { status: 201 });

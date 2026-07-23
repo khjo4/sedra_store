@@ -28,9 +28,9 @@ export async function GET(request: Request) {
       );
     }
     
-    // ✅ 5. دعم Pagination
+    // ✅ 5. دعم Pagination — الافتراضي كل العملاء للوحة الإدارة
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const limit = parseInt(searchParams.get('limit') || '10000');
     const start = (page - 1) * limit;
     const end = start + limit;
     const paginatedCustomers = customers.slice(start, end);

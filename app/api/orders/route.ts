@@ -1,19 +1,18 @@
 import { NextResponse } from 'next/server';
-import { getAllOrders, createOrder } from '@/lib/db';
-import { query } from '@/lib/db';
+import { getAllOrders, createOrderSecure, createOrUpdateCustomer } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
-// ✅ GET - جلب جميع الطلبات (للمدير فقط)
 export async function GET(request: Request) {
   try {
     const orders = await getAllOrders();
-    
+
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const limit = parseInt(searchParams.get('limit') || '10000');
     const start = (page - 1) * limit;
     const end = start + limit;
     const paginatedOrders = orders.slice(start, end);
-    
+
     return NextResponse.json({
       orders: paginatedOrders,
       total: orders.length,
@@ -30,92 +29,87 @@ export async function GET(request: Request) {
   }
 }
 
-// ✅ POST - إنشاء طلب جديد (مع تحديث المخزون)
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    
-    // ✅ 1. التحقق من البيانات الأساسية
+    const session = await getSession();
+
     if (!body.customerName || !body.customerPhone || !body.address || !body.city) {
       return NextResponse.json(
         { error: 'الاسم ورقم الهاتف والعنوان والمدينة حقول مطلوبة' },
         { status: 400 }
       );
     }
-    
+
     if (!body.items || body.items.length === 0) {
       return NextResponse.json(
         { error: 'الطلب يجب أن يحتوي على منتجات' },
         { status: 400 }
       );
     }
-    
-    // ✅ 2. التحقق من توفر المخزون لكل منتج
-    for (const item of body.items) {
-      const result = await query(
-        'SELECT stock FROM products WHERE id = ?',
-        [item.productId]
-      ) as any[];
-      
-      const product = result[0];
-      if (!product) {
-        return NextResponse.json(
-          { error: `المنتج غير موجود: ${item.productId}` },
-          { status: 400 }
-        );
-      }
-      
-      if (product.stock < item.quantity) {
-        return NextResponse.json(
-          { error: `المنتج ${item.name || item.productId} غير متوفر بالكمية المطلوبة. المتوفر: ${product.stock}` },
-          { status: 400 }
-        );
-      }
-    }
-    
-    // ✅ 3. إنشاء الطلب
-    const newOrder = await createOrder(body);
-    
-    // ✅ 4. تحديث المخزون (تقليل الكمية)
-    for (const item of body.items) {
-      await query(
-        'UPDATE products SET stock = stock - ? WHERE id = ?',
-        [item.quantity, item.productId]
-      );
-    }
-    
-    // ✅ 5. تحديث معلومات العميل
-   // ✅ 5. تحديث معلومات العميل
-try {
-  console.log('📦 Customer data from order:', {
-    name: body.customerName,
-    email: body.customerEmail,
-    phone: body.customerPhone,
-    address: body.address,
-    city: body.city,
-    totalSpent: body.total || 0
-  });
-  
-  const { createOrUpdateCustomer } = await import('@/lib/db');
-  const result = await createOrUpdateCustomer({
-    name: body.customerName,
-    email: body.customerEmail || body.customerPhone,     phone: body.customerPhone,
-    address: body.address,
-    city: body.city,
-    totalSpent: body.total || 0,
-  });
-  
-  console.log('✅ Customer update result:', result);
-} catch (customerError) {
-  console.error('❌ Error updating customer:', customerError);
-}
 
-    return NextResponse.json({ success: true, id: newOrder.id }, { status: 201 });
-  } catch (error) {
-    console.error('Error creating order:', error);
+    // إن كان مسجّلاً: استخدم بريده إن لم يُرسل بريد في النموذج
+    const customerEmail =
+      body.customerEmail?.trim() || session?.email || '';
+
+    const newOrder = await createOrderSecure({
+      customerName: body.customerName,
+      customerEmail,
+      customerPhone: body.customerPhone,
+      address: body.address,
+      city: body.city,
+      notes: body.notes || null,
+      paymentMethod: body.paymentMethod || 'cod',
+      couponCode: body.couponCode || null,
+      items: body.items.map((item: any) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        selectedColor: item.selectedColor,
+        selectedSize: item.selectedSize,
+      })),
+    });
+
+    // حفظ/تحديث العميل (ضيف أو مسجّل) — لا نبتلع الخطأ بصمت
+    try {
+      const customer = await createOrUpdateCustomer({
+        id: session?.id,
+        name: body.customerName,
+        email: customerEmail || null,
+        phone: body.customerPhone,
+        address: body.address,
+        city: body.city,
+        totalSpent: newOrder.total,
+      });
+      if (!customer) {
+        console.error('createOrUpdateCustomer returned null for order', newOrder.id);
+      }
+    } catch (customerError) {
+      console.error('Error updating customer for order', newOrder.id, customerError);
+    }
+
     return NextResponse.json(
-      { error: 'حدث خطأ في إنشاء الطلب' },
-      { status: 500 }
+      {
+        success: true,
+        id: newOrder.id,
+        total: newOrder.total,
+        subtotal: newOrder.subtotal,
+        discount: newOrder.discount,
+        shipping: newOrder.shipping,
+      },
+      { status: 201 }
     );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'حدث خطأ في إنشاء الطلب';
+    console.error('Error creating order:', error);
+    const status =
+      message.includes('غير متوفر') ||
+      message.includes('غير موجود') ||
+      message.includes('كود الخصم') ||
+      message.includes('الحد الأدنى') ||
+      message.includes('كمية')
+        ? 400
+        : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

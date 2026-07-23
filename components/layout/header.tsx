@@ -16,6 +16,8 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import { Badge } from '@/components/ui/badge'
 import { cn, formatPriceAsync, fetchExchangeRate } from '@/lib/utils'
 import type { Currency, Category } from '@/lib/types'
+import { useAdminSession } from '@/hooks/use-admin-session'
+import { getCart, getWishlistIds } from '@/lib/cart-wishlist'
 
 const navLinks = [
   { href: '/', label: 'الرئيسية' },
@@ -24,33 +26,9 @@ const navLinks = [
   { href: '/shop?filter=sale', label: 'تخفيضات' },
 ]
 
-// ================================================
-// ✅ دوال السلة والمفضلة (مؤقتاً)
-// ================================================
-const CART_KEY = 'sedra_cart'
-const WISHLIST_KEY = 'sedra_wishlist'
-const ADMIN_TOKEN_KEY = 'admin_token'
-
-const getCart = (): any[] => {
-  if (typeof window === 'undefined') return []
-  const cart = localStorage.getItem(CART_KEY)
-  return cart ? JSON.parse(cart) : []
-}
-
 const getCartCount = (): number => {
-  return getCart().reduce((sum: number, item: any) => sum + (item.quantity || 0), 0)
+  return getCart().reduce((sum, item) => sum + (item.quantity || 0), 0)
 }
-
-const getWishlist = (): string[] => {
-  if (typeof window === 'undefined') return []
-  const wishlist = localStorage.getItem(WISHLIST_KEY)
-  return wishlist ? JSON.parse(wishlist) : []
-}
-
-// ================================================
-// ✅ دوال العملة - تم استبدالها بـ lib/utils
-// ================================================
-
 export function Header() {
   const pathname = usePathname()
   const [mounted, setMounted] = useState(false)
@@ -63,7 +41,7 @@ export function Header() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const { isAdmin } = useAdminSession()
   const [settings, setSettings] = useState<any>(null)
   const [categories, setCategories] = useState<Category[]>([])
   const [user, setUser] = useState<any>(null);
@@ -134,31 +112,6 @@ useEffect(() => {
 
   useEffect(() => {
   setMounted(true)
-  
-  const checkAdmin = () => {
-    const adminToken = localStorage.getItem(ADMIN_TOKEN_KEY)
-    setIsAdmin(!!adminToken)
-  }
-  
-  checkAdmin()
-  
-  // ✅ الاستماع لأي تغيير في localStorage
-  const handleStorageChange = () => {
-    checkAdmin()
-  }
-  
-  // ✅ حدث مخصص لتسجيل الخروج
-  const handleAdminLogout = () => {
-    checkAdmin()
-  }
-  
-  window.addEventListener('storage', handleStorageChange)
-  window.addEventListener('adminLogout', handleAdminLogout)
-  
-  return () => {
-    window.removeEventListener('storage', handleStorageChange)
-    window.removeEventListener('adminLogout', handleAdminLogout)
-  }
 }, [])
 
   useEffect(() => {
@@ -172,7 +125,7 @@ useEffect(() => {
   useEffect(() => {
     const updateCounts = () => {
       setCartCount(getCartCount())
-      setWishlistCount(getWishlist().length)
+      setWishlistCount(getWishlistIds().length)
     }
     updateCounts()
     
@@ -202,13 +155,23 @@ useEffect(() => {
     }
   }
 
+  const storeNameEn =
+    settings?.storeNameEn || settings?.store_name_en || 'SEDRA'
+
   // أثناء التحميل، اعرض نسخة بسيطة
   if (!mounted || !settings || categories.length === 0) {
     return (
       <header className="sticky top-0 z-50 w-full bg-background py-4">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between">
-            <span className="text-2xl md:text-3xl font-bold text-gradient">SEDRA</span>
+            <Link href="/" className="flex items-center gap-2.5">
+              <img
+                src="/image/logo.png"
+                alt="SEDRA"
+                className="h-10 w-10 rounded-full object-contain bg-primary/5 p-0.5"
+              />
+              <span className="text-2xl font-bold text-gradient">SEDRA</span>
+            </Link>
           </div>
         </div>
       </header>
@@ -219,7 +182,7 @@ useEffect(() => {
     <>
      {/* Announcement Bar */}
 {settings?.announcementActive && settings?.announcement && (
-  <div className="bg-primary text-primary-foreground py-2 px-4 text-center text-sm">
+  <div className="bg-primary text-primary-foreground py-2.5 px-4 text-center text-sm tracking-wide">
     <p className="text-balance">{settings.announcement}</p>
   </div>
 )}
@@ -229,8 +192,8 @@ useEffect(() => {
         className={cn(
           'sticky top-0 z-50 w-full transition-all duration-300',
           isScrolled
-            ? 'glass-strong shadow-md py-2'
-            : 'bg-background py-4'
+            ? 'glass-strong shadow-[0_8px_30px_-18px_oklch(0.35_0.04_20/0.4)] py-2.5'
+            : 'bg-background/70 backdrop-blur-md py-4'
         )}
       >
         <div className="container mx-auto px-4">
@@ -238,83 +201,132 @@ useEffect(() => {
             {/* Mobile Menu */}
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild className="lg:hidden">
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" className="rounded-xl">
                   <Menu className="h-6 w-6" />
                   <span className="sr-only">فتح القائمة</span>
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-75 sm:w-87.5  pr-4">
+              <SheetContent
+                side="right"
+                className="flex w-[18rem] flex-col border-sidebar-border bg-sidebar p-0 sm:w-[20rem]"
+              >
                 <SheetTitle className="sr-only">القائمة الرئيسية</SheetTitle>
-                 <div className="mt-8 mb-4">
-    {!user ? (
-      <div className="flex flex-col gap-2">
-        <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
-          <Button className="w-full">تسجيل الدخول</Button>
-        </Link>
-        <Link href="/register" onClick={() => setMobileMenuOpen(false)}>
-          <Button variant="outline" className="w-full">إنشاء حساب</Button>
-        </Link>
-      </div>
-    ) : (
-      <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-          <User className="h-5 w-5 text-primary" />
-        </div>
-        <div className="flex-1">
-          <p className="font-medium">{user.name}</p>
-          <p className="text-xs text-muted-foreground">{user.email}</p>
-        </div>
-        <Link href="/account" onClick={() => setMobileMenuOpen(false)}>
-          <Button size="sm">حسابي</Button>
-        </Link>
-      </div>
-    )}
-  </div>
-                <nav className="flex flex-col gap-4 mt-8">
-                  {navLinks.map((link) => (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={cn(
-                        'text-lg font-medium py-2 border-b border-border transition-colors',
-                        pathname === link.href
-                          ? 'text-primary'
-                          : 'text-foreground hover:text-primary'
-                      )}
-                    >
-                      {link.label}
-                    </Link>
-                  ))}
 
-                  <div className="pt-4">
-                    <p className="text-sm text-muted-foreground mb-2">الأقسام</p>
-                    {categories.map((cat) => (
-                      <Link
-                        key={cat.id}
-                        href={`/shop?category=${cat.slug}`}
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="block py-2 text-foreground hover:text-primary transition-colors"
-                      >
-                        {cat.name}
+                {/* مساحة لزر الإغلاق X */}
+                <div className="h-14 shrink-0 border-b border-sidebar-border" />
+
+                {/* Account block */}
+                <div className="border-b border-sidebar-border px-4 py-4">
+                  {!user ? (
+                    <div className="flex flex-col gap-2">
+                      <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                        <Button className="w-full rounded-xl">تسجيل الدخول</Button>
                       </Link>
-                    ))}
-                  </div>
+                      <Link href="/register" onClick={() => setMobileMenuOpen(false)}>
+                        <Button variant="outline" className="w-full rounded-xl">
+                          إنشاء حساب
+                        </Button>
+                      </Link>
+                    </div>
+                  ) : (
+                    <Link
+                      href="/account"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-3 rounded-2xl bg-primary/8 p-3 ring-1 ring-primary/15 transition-colors hover:bg-primary/12"
+                    >
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15">
+                        <User className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{user.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {user.email}
+                        </p>
+                      </div>
+                    </Link>
+                  )}
+                </div>
+
+                {/* Nav links */}
+                <nav className="flex-1 overflow-y-auto px-3 py-4">
+                  <p className="mb-2 px-3 text-[11px] font-semibold tracking-wider text-muted-foreground/80">
+                    التصفح
+                  </p>
+                  <ul className="space-y-1">
+                    {navLinks.map((link) => {
+                      const isActive = pathname === link.href
+                      return (
+                        <li key={link.href}>
+                          <Link
+                            href={link.href}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={cn(
+                              'relative flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
+                              isActive
+                                ? 'bg-primary/12 text-primary shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_22%,transparent)]'
+                                : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                            )}
+                          >
+                            {isActive && (
+                              <span className="absolute inset-y-2 start-0 w-1 rounded-full bg-primary" />
+                            )}
+                            {link.label}
+                          </Link>
+                        </li>
+                      )
+                    })}
+                  </ul>
+
+                  {categories.length > 0 && (
+                    <>
+                      <p className="mb-2 mt-5 px-3 text-[11px] font-semibold tracking-wider text-muted-foreground/80">
+                        الأقسام
+                      </p>
+                      <ul className="space-y-1">
+                        {categories.map((cat) => (
+                          <li key={cat.id}>
+                            <Link
+                              href={`/shop?category=${cat.slug}`}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                            >
+                              <span>{cat.name}</span>
+                              {typeof cat.productCount === 'number' && (
+                                <span className="text-xs text-muted-foreground/70">
+                                  {cat.productCount}
+                                </span>
+                              )}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+
+                  {isAdmin && (
+                    <div className="mt-5 border-t border-sidebar-border pt-4">
+                      <Link
+                        href="/admin"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex items-center rounded-xl px-3 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+                      >
+                        لوحة التحكم
+                      </Link>
+                    </div>
+                  )}
                 </nav>
               </SheetContent>
             </Sheet>
 
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-2">
-              <div className="relative w-10 h-10 rounded-full overflow-hidden bg-primary/10">
-                <img
-                  src="/image/logo.png"
-                  alt={settings.store_name_en || 'SEDRA'}
-                  className="w-full h-full object-cover p-1"
-                />
-              </div>
-              <span className="text-2xl md:text-3xl font-bold text-gradient">
-                {settings.store_name_en || 'SEDRA'}
+            <Link href="/" className="flex items-center gap-2.5">
+              <img
+                src="/image/logo.png"
+                alt={storeNameEn}
+                className="h-10 w-10 rounded-full object-contain bg-primary/5 p-0.5 ring-1 ring-border/50 md:h-11 md:w-11"
+              />
+              <span className="text-2xl font-bold text-gradient md:text-3xl">
+                {storeNameEn}
               </span>
             </Link>
 

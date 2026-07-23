@@ -78,21 +78,21 @@ export default function AdminSettingsPage() {
     setIsSaving(true)
     try {
       const payload = {
-        store_name: formData.storeName,
-        store_name_en: formData.storeNameEn,
+        storeName: formData.storeName,
+        storeNameEn: formData.storeNameEn,
         currency: formData.currency,
-        exchange_rate: formData.exchangeRate,
-        free_shipping_threshold: formData.freeShippingThreshold,
-        shipping_cost: formData.shippingCost,
-        contact_email: formData.contactEmail,
-        contact_phone: formData.contactPhone,
-        instagram_url: formData.instagramUrl || '',
-        facebook_url: formData.facebookUrl || '',
-        whatsapp_url: formData.whatsappUrl || '',
-        hero_title: formData.heroTitle,
-        hero_subtitle: formData.heroSubtitle,
+        exchangeRate: Number(formData.exchangeRate) || 0,
+        freeShippingThreshold: Number(formData.freeShippingThreshold) || 0,
+        shippingCost: Number(formData.shippingCost) || 0,
+        contactEmail: formData.contactEmail,
+        contactPhone: formData.contactPhone,
+        instagramUrl: formData.instagramUrl || '',
+        facebookUrl: formData.facebookUrl || '',
+        whatsappUrl: formData.whatsappUrl || '',
+        heroTitle: formData.heroTitle,
+        heroSubtitle: formData.heroSubtitle,
         announcement: formData.announcement || '',
-        announcement_active: formData.announcementActive,
+        announcementActive: formData.announcementActive,
       }
 
       const response = await fetch('/api/settings', {
@@ -103,7 +103,10 @@ export default function AdminSettingsPage() {
 
       if (!response.ok) throw new Error('فشل في حفظ الإعدادات')
 
-      setInitialSettings(formData)
+      const result = await response.json()
+      const saved = result.settings || formData
+      setInitialSettings(saved)
+      setFormData((prev) => ({ ...prev, ...saved }))
       toast.success('تم حفظ الإعدادات بنجاح')
     } catch (error) {
       console.error('Error saving settings:', error)
@@ -228,32 +231,67 @@ export default function AdminSettingsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="shippingCost" className="mb-2 block">تكلفة الشحن ($)</Label>
-              <Input
-                id="shippingCost"
-                type="number"
-                min="0"
-                step="0.01"
-                value={formData.shippingCost}
-                onChange={(e) =>
-                  setFormData({ ...formData, shippingCost: Number(e.target.value) })
+            <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+              <p className="font-medium">أسعار الشحن حسب المحافظة</p>
+              <p className="text-muted-foreground">إدلب: $2</p>
+              <p className="text-muted-foreground">باقي المحافظات: $3</p>
+              <p className="text-xs text-muted-foreground mt-2">
+                تُحسب تلقائياً عند اختيار المدينة في صفحة الدفع
+              </p>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor="freeShippingEnabled">تفعيل الشحن المجاني</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  عند التعطيل لن يُمنح شحن مجاني مهما بلغ مبلغ الطلب
+                </p>
+              </div>
+              <Switch
+                id="freeShippingEnabled"
+                checked={(formData.freeShippingThreshold || 0) > 0}
+                onCheckedChange={(checked) =>
+                  setFormData({
+                    ...formData,
+                    freeShippingThreshold: checked
+                      ? formData.freeShippingThreshold > 0
+                        ? formData.freeShippingThreshold
+                        : 50
+                      : 0,
+                  })
                 }
               />
             </div>
-            <div>
-              <Label htmlFor="freeShippingThreshold" className="mb-2 block">حد الشحن المجاني ($)</Label>
-              <Input
-                id="freeShippingThreshold"
-                type="number"
-                min="0"
-                value={formData.freeShippingThreshold}
-                onChange={(e) =>
-                  setFormData({ ...formData, freeShippingThreshold: Number(e.target.value) })
-                }
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                الشحن مجاني للطلبات أكثر من ${formData.freeShippingThreshold}
+            {(formData.freeShippingThreshold || 0) > 0 && (
+              <div>
+                <Label htmlFor="freeShippingThreshold" className="mb-2 block">
+                  حد الشحن المجاني (بالدولار)
+                </Label>
+                <Input
+                  id="freeShippingThreshold"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={formData.freeShippingThreshold}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      freeShippingThreshold: Number(e.target.value),
+                    })
+                  }
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  الشحن مجاني عندما يصل مبلغ الطلب (بعد الخصم) إلى $
+                  {formData.freeShippingThreshold} أو أكثر
+                </p>
+              </div>
+            )}
+            <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+              <p className="font-medium">معاينة</p>
+              <p className="text-muted-foreground">
+                {(formData.freeShippingThreshold || 0) > 0
+                  ? `شحن مجاني فوق $${formData.freeShippingThreshold}`
+                  : 'الشحن المجاني معطّل'}
               </p>
             </div>
           </CardContent>

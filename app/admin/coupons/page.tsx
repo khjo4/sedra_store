@@ -46,31 +46,29 @@ const fetchCoupons = async (): Promise<Coupon[]> => {
 }
 
 const createCouponAPI = async (couponData: any): Promise<any> => {
-  try {
-    const response = await fetch('/api/coupons', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(couponData),
-    })
-    return await response.json()
-  } catch (error) {
-    console.error('Error creating coupon:', error)
-    throw error
+  const response = await fetch('/api/coupons', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(couponData),
+  })
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error(data.error || 'فشل إنشاء الكوبون')
   }
+  return data
 }
 
 const updateCouponAPI = async (id: string, couponData: any): Promise<any> => {
-  try {
-    const response = await fetch(`/api/coupons/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(couponData),
-    })
-    return await response.json()
-  } catch (error) {
-    console.error('Error updating coupon:', error)
-    throw error
+  const response = await fetch(`/api/coupons/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(couponData),
+  })
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error(data.error || 'فشل تحديث الكوبون')
   }
+  return data
 }
 
 const deleteCouponAPI = async (id: string): Promise<void> => {
@@ -141,14 +139,25 @@ export default function AdminCouponsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!formData.code.trim()) {
+      toast.error('كود الكوبون مطلوب')
+      return
+    }
+    if (!formData.value || formData.value <= 0) {
+      toast.error('قيمة الخصم يجب أن تكون أكبر من 0')
+      return
+    }
     
     const couponData = {
-      code: formData.code.toUpperCase(),
+      code: formData.code.toUpperCase().trim(),
       type: formData.type,
-      value: formData.value,
-      minPurchase: formData.minPurchase || 0,
-      maxUses: formData.maxUses || 100,
-      expiresAt: formData.expiresAt ? new Date(formData.expiresAt).toISOString() : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      value: Number(formData.value),
+      minPurchase: Number(formData.minPurchase) || 0,
+      maxUses: Number(formData.maxUses) || 100,
+      expiresAt: formData.expiresAt
+        ? new Date(formData.expiresAt).toISOString()
+        : null,
       active: formData.active,
     }
 
@@ -164,7 +173,7 @@ export default function AdminCouponsPage() {
       setIsDialogOpen(false)
       resetForm()
     } catch (error) {
-      toast.error("حدث خطأ أثناء حفظ الكوبون")
+      toast.error(error instanceof Error ? error.message : "حدث خطأ أثناء حفظ الكوبون")
     }
   }
 

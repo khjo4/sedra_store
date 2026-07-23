@@ -34,20 +34,22 @@ export async function PUT(request: Request) {
     // وما منحدد أي أرقام ثابتة
     
     await updateSettings({
-      storeName: body.storeName || body.store_name,
-      storeNameEn: body.storeNameEn || body.store_name_en,
+      storeName: body.storeName ?? body.store_name,
+      storeNameEn: body.storeNameEn ?? body.store_name_en,
       currency: body.currency,
-      exchangeRate: body.exchangeRate || body.exchange_rate, // من المدير
-      freeShippingThreshold: body.freeShippingThreshold || body.free_shipping_threshold,
-      shippingCost: body.shippingCost || body.shipping_cost,
-      contactEmail: body.contactEmail || body.contact_email,
-      contactPhone: body.contactPhone || body.contact_phone,
-      whatsappNumber: body.whatsappNumber || body.whatsapp_number,
-      instagramUrl: body.instagramUrl || body.instagram_url,
-      facebookUrl: body.facebookUrl || body.facebook_url,
-      whatsappUrl: body.whatsappUrl || body.whatsapp_url,
-      heroTitle: body.heroTitle || body.hero_title,
-      heroSubtitle: body.heroSubtitle || body.hero_subtitle,
+      exchangeRate: Number(body.exchangeRate ?? body.exchange_rate ?? 0),
+      freeShippingThreshold: Number(
+        body.freeShippingThreshold ?? body.free_shipping_threshold ?? 0
+      ),
+      shippingCost: Number(body.shippingCost ?? body.shipping_cost ?? 0),
+      contactEmail: body.contactEmail ?? body.contact_email,
+      contactPhone: body.contactPhone ?? body.contact_phone,
+      whatsappNumber: body.whatsappNumber ?? body.whatsapp_number,
+      instagramUrl: body.instagramUrl ?? body.instagram_url,
+      facebookUrl: body.facebookUrl ?? body.facebook_url,
+      whatsappUrl: body.whatsappUrl ?? body.whatsapp_url,
+      heroTitle: body.heroTitle ?? body.hero_title,
+      heroSubtitle: body.heroSubtitle ?? body.hero_subtitle,
       announcement: body.announcement,
       announcementActive: body.announcementActive ?? body.announcement_active ?? false,
     });

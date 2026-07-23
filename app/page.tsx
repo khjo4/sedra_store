@@ -5,7 +5,6 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowLeft, Sparkles, Truck, Shield, ChevronLeft, ChevronRight, Star, DollarSign } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { ProductCard } from '@/components/product-card'
@@ -153,53 +152,47 @@ useEffect(() => {
 
       <main className="min-h-screen">
         {/* Hero Section */}
-        <section className="relative min-h-[70vh] flex items-center overflow-hidden bg-linear-to-bl from-pink-light via-background to-beige">
-          <div className="absolute inset-0 opacity-20">
-            <div className="absolute top-20 right-20 w-72 h-72 bg-primary/20 rounded-full blur-3xl" />
-            <div className="absolute bottom-20 left-20 w-96 h-96 bg-accent/20 rounded-full blur-3xl" />
+        <section className="relative flex min-h-[78vh] items-center overflow-hidden">
+          <div className="absolute inset-0 bg-linear-to-bl from-pink-light via-background to-beige" />
+          <div className="absolute inset-0 opacity-40">
+            <div className="absolute top-16 end-10 h-72 w-72 animate-[loginOrbFloat_12s_ease-in-out_infinite] rounded-full bg-primary/15 blur-3xl" />
+            <div className="absolute bottom-10 start-8 h-96 w-96 animate-[loginOrbFloat_14s_ease-in-out_infinite] rounded-full bg-accent/20 blur-3xl [animation-delay:-5s]" />
           </div>
 
-          <div className="container mx-auto px-4 py-16 relative z-10">
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              {/* الصورة */}
-              <div className="relative block animate-slide-up">
-                <div className="relative aspect-3/4 max-w-md mx-auto">
-                  <div className="absolute inset-0 bg-linear-to-br from-primary/20 to-accent/20 rounded-3xl transform rotate-3" />
-                  <div className="absolute inset-0 glass rounded-3xl overflow-hidden">
+          <div className="container relative z-10 mx-auto px-4 py-16 md:py-20">
+            <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+              <div className="relative order-1 animate-slide-up lg:order-2">
+                <div className="relative mx-auto aspect-3/4 max-w-md">
+                  <div className="absolute inset-0 rotate-2 rounded-[2rem] bg-linear-to-br from-primary/15 to-accent/20" />
+                  <div className="absolute inset-0 overflow-hidden rounded-[2rem] border border-border/40 bg-card/50 shadow-[0_30px_80px_-40px_oklch(0.4_0.05_20/0.45)] backdrop-blur-sm">
                     <Image
                       src="/image/logo.png"
-                      alt="مجموعة سيدرا"
+                      alt="SEDRA"
                       fill
-                      className="object-contain p-8"
+                      className="object-contain p-10 md:p-12"
                       priority
                     />
-                  </div>
-                  <div className="absolute -bottom-6 -right-6 glass-strong rounded-2xl p-4 shadow-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Sparkles className="h-6 w-6 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">أناقتك تهمنا</p>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* النص */}
-              <div className="text-center lg:text-right animate-fade-in">
-                <h1 className="text-4xl md:text-5xl lg:text-5xl font-bold mb-5 text-balance leading-tight">
+              <div className="order-2 animate-fade-in text-center lg:order-1 lg:text-start">
+                <p className="mb-4 text-sm font-semibold tracking-[0.2em] text-primary/80">
+                  SEDRA
+                </p>
+                <h1 className="mb-5 text-balance text-4xl font-bold leading-[1.15] tracking-tight md:text-5xl lg:text-[3.25rem]">
                   {settings.hero_title || settings.heroTitle}
                 </h1>
-                <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-xl mx-auto lg:mx-0 text-pretty">
+                <p className="mx-auto mb-9 max-w-xl text-pretty text-lg text-muted-foreground md:text-xl lg:mx-0">
                   {settings.hero_subtitle || settings.heroSubtitle}
                 </p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                  <Button asChild size="lg" className="text-base gap-2">
-                    <Link href="/shop">تسوقي الآن <ArrowLeft className="h-5 w-5" /></Link>
+                <div className="flex flex-col justify-center gap-3 sm:flex-row sm:gap-4 lg:justify-start">
+                  <Button asChild size="lg" className="gap-2">
+                    <Link href="/shop">
+                      تسوقي الآن <ArrowLeft className="h-5 w-5" />
+                    </Link>
                   </Button>
-                  <Button asChild variant="outline" size="lg" className="text-base">
+                  <Button asChild variant="outline" size="lg">
                     <Link href="/shop?filter=new">المجموعة الجديدة</Link>
                   </Button>
                 </div>
@@ -209,16 +202,16 @@ useEffect(() => {
         </section>
 
         {/* Features */}
-        <section className="py-12 border-y border-border bg-card">
+        <section className="border-y border-border/60 bg-card/60 py-10 backdrop-blur-sm">
           <div className="container mx-auto px-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 gap-6 md:grid-cols-4 md:gap-8">
               {features.map((feature) => (
-                <div key={feature.title} className="flex flex-col items-center text-center p-4">
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-                    <feature.icon className="h-6 w-6 text-primary" />
+                <div key={feature.title} className="flex flex-col items-center px-2 py-2 text-center">
+                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+                    <feature.icon className="h-5 w-5 text-primary" />
                   </div>
-                  <h3 className="font-semibold mb-1">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground">{feature.description}</p>
+                  <h3 className="mb-1 text-sm font-semibold md:text-base">{feature.title}</h3>
+                  <p className="text-xs text-muted-foreground md:text-sm">{feature.description}</p>
                 </div>
               ))}
             </div>
@@ -226,31 +219,37 @@ useEffect(() => {
         </section>
 
         {/* Categories */}
-        <section className="py-16">
+        <section className="page-section">
           <div className="container mx-auto px-4">
-            <div className="flex items-center justify-between mb-8">
+            <div className="mb-8 flex items-end justify-between gap-4">
               <div>
-                <h2 className="text-2xl md:text-3xl font-bold mb-2">تسوقي حسب القسم</h2>
-                <p className="text-muted-foreground">اختاري من تشكيلتنا المتنوعة</p>
+                <h2 className="section-title">تسوقي حسب القسم</h2>
+                <p className="section-subtitle">اختاري من تشكيلتنا المتنوعة</p>
               </div>
-              <Button variant="ghost" asChild className="hidden sm:flex gap-1">
-                <Link href="/shop">عرض الكل <ArrowLeft className="h-4 w-4" /></Link>
+              <Button variant="ghost" asChild className="hidden gap-1 sm:flex">
+                <Link href="/shop">
+                  عرض الكل <ArrowLeft className="h-4 w-4" />
+                </Link>
               </Button>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-6">
               {categories.map((category) => (
-                <Link key={category.id} href={`/shop?category=${category.slug}`} className="group relative aspect-3/4 rounded-2xl overflow-hidden hover-lift">
-                  <Image 
-                    src={category.image || '/placeholder-category.jpg'} 
-                    alt={category.name} 
-                    fill 
-                    className="object-cover transition-transform duration-500 group-hover:scale-110" 
+                <Link
+                  key={category.id}
+                  href={`/shop?category=${category.slug}`}
+                  className="group relative aspect-3/4 overflow-hidden rounded-2xl hover-lift"
+                >
+                  <Image
+                    src={category.image || '/placeholder-category.jpg'}
+                    alt={category.name}
+                    fill
+                    className="object-cover transition-transform duration-700 group-hover:scale-110"
                   />
-                  <div className="absolute inset-0 bg-linear-to-t from-foreground/80 via-foreground/20 to-transparent" />
-                  <div className="absolute bottom-0 right-0 left-0 p-4 text-primary-foreground">
-                    <h3 className="font-semibold text-lg">{category.name}</h3>
-                    <p className="text-sm opacity-80">{category.productCount} منتج</p>
+                  <div className="absolute inset-0 bg-linear-to-t from-foreground/75 via-foreground/15 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 p-3 text-primary-foreground md:p-4">
+                    <h3 className="text-base font-semibold md:text-lg">{category.name}</h3>
+                    <p className="text-xs opacity-80 md:text-sm">{category.productCount} منتج</p>
                   </div>
                 </Link>
               ))}
@@ -259,18 +258,20 @@ useEffect(() => {
         </section>
 
         {/* Featured Products */}
-        <section className="py-16 bg-secondary/30">
+        <section className="page-section bg-secondary/40">
           <div className="container mx-auto px-4">
-            <div className="flex items-center justify-between mb-8">
+            <div className="mb-8 flex items-end justify-between gap-4">
               <div>
-                <h2 className="text-2xl md:text-3xl font-bold mb-2">منتجات مميزة</h2>
-                <p className="text-muted-foreground">اختيارات مميزة لك</p>
+                <h2 className="section-title">منتجات مميزة</h2>
+                <p className="section-subtitle">اختيارات مميزة لك</p>
               </div>
               <Button variant="ghost" asChild className="gap-1">
-                <Link href="/shop">عرض الكل <ArrowLeft className="h-4 w-4" /></Link>
+                <Link href="/shop">
+                  عرض الكل <ArrowLeft className="h-4 w-4" />
+                </Link>
               </Button>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5 lg:grid-cols-4">
               {featuredProducts.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
@@ -279,30 +280,34 @@ useEffect(() => {
         </section>
 
         {/* Best Sellers & New Arrivals */}
-        <section className="py-16">
+        <section className="page-section">
           <div className="container mx-auto px-4">
-            <div className="grid lg:grid-cols-2 gap-12">
+            <div className="grid gap-12 lg:grid-cols-2 lg:gap-14">
               <div>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl md:text-2xl font-bold">الأكثر مبيعاً</h2>
+                <div className="mb-6 flex items-center justify-between">
+                  <h2 className="text-xl font-bold tracking-tight md:text-2xl">الأكثر مبيعاً</h2>
                   <Button variant="ghost" size="sm" asChild className="gap-1">
-                    <Link href="/shop?filter=bestseller">المزيد <ArrowLeft className="h-4 w-4" /></Link>
+                    <Link href="/shop?filter=bestseller">
+                      المزيد <ArrowLeft className="h-4 w-4" />
+                    </Link>
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3 md:gap-4">
                   {bestSellers.map((product) => (
                     <ProductCard key={product.id} product={product} />
                   ))}
                 </div>
               </div>
               <div>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl md:text-2xl font-bold">وصل حديثاً</h2>
+                <div className="mb-6 flex items-center justify-between">
+                  <h2 className="text-xl font-bold tracking-tight md:text-2xl">وصل حديثاً</h2>
                   <Button variant="ghost" size="sm" asChild className="gap-1">
-                    <Link href="/shop?filter=new">المزيد <ArrowLeft className="h-4 w-4" /></Link>
+                    <Link href="/shop?filter=new">
+                      المزيد <ArrowLeft className="h-4 w-4" />
+                    </Link>
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3 md:gap-4">
                   {newArrivals.map((product) => (
                     <ProductCard key={product.id} product={product} />
                   ))}
@@ -313,62 +318,73 @@ useEffect(() => {
         </section>
 
         {/* Testimonials */}
-        <section className="py-16 bg-card">
+        <section className="page-section bg-card/50">
           <div className="container mx-auto px-4">
-            <div className="text-center mb-12">
-              <h2 className="text-2xl md:text-3xl font-bold mb-2">ماذا تقول عميلاتنا</h2>
-              <p className="text-muted-foreground">آراء حقيقية من عميلاتنا</p>
+            <div className="mb-10 text-center">
+              <h2 className="section-title">ماذا تقول عميلاتنا</h2>
+              <p className="section-subtitle">آراء حقيقية من عميلاتنا</p>
             </div>
-            <div className="max-w-2xl mx-auto relative">
+            <div className="relative mx-auto max-w-2xl">
               <div className="overflow-hidden">
-                <div className="flex transition-transform duration-500" style={{ transform: `translateX(${currentTestimonial * 100}%)` }}>
+                <div
+                  className="flex transition-transform duration-500"
+                  style={{ transform: `translateX(${currentTestimonial * 100}%)` }}
+                >
                   {testimonials.map((testimonial) => (
-                    <Card key={testimonial.id} className="shrink-0 w-full">
-                      <CardContent className="pt-8 text-center">
-                        <div className="w-16 h-16 rounded-full bg-primary/10 mx-auto mb-4 overflow-hidden">
-                          <Image 
-                            src={testimonial.avatar} 
-                            alt={testimonial.name} 
-                            width={64} 
-                            height={64} 
-                            className="object-cover" 
+                    <div key={testimonial.id} className="w-full shrink-0 px-1">
+                      <div className="store-surface px-6 py-10 text-center md:px-10">
+                        <div className="mx-auto mb-4 h-16 w-16 overflow-hidden rounded-full bg-primary/10 ring-4 ring-primary/10">
+                          <Image
+                            src={testimonial.avatar}
+                            alt={testimonial.name}
+                            width={64}
+                            height={64}
+                            className="object-cover"
                           />
                         </div>
-                        <div className="flex items-center justify-center gap-1 mb-4">
+                        <div className="mb-4 flex items-center justify-center gap-1">
                           {[...Array(testimonial.rating)].map((_, i) => (
-                            <Star key={i} className="h-5 w-5 fill-accent text-accent" />
+                            <Star key={i} className="h-4 w-4 fill-accent text-accent" />
                           ))}
                         </div>
-                        <p className="text-lg mb-4 text-pretty">{testimonial.text}</p>
+                        <p className="mb-5 text-pretty text-lg leading-relaxed">{testimonial.text}</p>
                         <p className="font-semibold">{testimonial.name}</p>
                         <p className="text-sm text-muted-foreground">{testimonial.location}</p>
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
-              <div className="flex items-center justify-center gap-2 mt-6">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  onClick={() => setCurrentTestimonial((prev) => (prev === 0 ? testimonials.length - 1 : prev - 1))}
+              <div className="mt-6 flex items-center justify-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() =>
+                    setCurrentTestimonial((prev) =>
+                      prev === 0 ? testimonials.length - 1 : prev - 1
+                    )
+                  }
                 >
                   <ChevronRight className="h-5 w-5" />
                 </Button>
                 {testimonials.map((_, i) => (
-                  <button 
-                    key={i} 
-                    onClick={() => setCurrentTestimonial(i)} 
+                  <button
+                    key={i}
+                    onClick={() => setCurrentTestimonial(i)}
                     className={cn(
-                      'w-2 h-2 rounded-full transition-colors', 
-                      i === currentTestimonial ? 'bg-primary' : 'bg-muted-foreground/30'
-                    )} 
+                      'h-2 rounded-full transition-all',
+                      i === currentTestimonial
+                        ? 'w-6 bg-primary'
+                        : 'w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50'
+                    )}
                   />
                 ))}
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  onClick={() => setCurrentTestimonial((prev) => (prev + 1) % testimonials.length)}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() =>
+                    setCurrentTestimonial((prev) => (prev + 1) % testimonials.length)
+                  }
                 >
                   <ChevronLeft className="h-5 w-5" />
                 </Button>
@@ -378,13 +394,24 @@ useEffect(() => {
         </section>
 
         {/* CTA */}
-        <section className="py-16">
+        <section className="pb-16 pt-4 md:pb-20">
           <div className="container mx-auto px-4">
-            <div className="relative rounded-3xl overflow-hidden bg-linear-to-r from-primary to-primary/80 text-primary-foreground p-8 md:p-12">
-              <div className="relative z-10 text-center max-w-2xl mx-auto">
-                <p className="text-primary-foreground/80 mb-6">
+            <div className="relative overflow-hidden rounded-[2rem] gradient-primary p-8 text-primary-foreground md:p-12">
+              <div className="absolute -start-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+              <div className="absolute -bottom-16 -end-8 h-48 w-48 rounded-full bg-black/10 blur-2xl" />
+              <div className="relative z-10 mx-auto max-w-2xl text-center">
+                <h2 className="mb-3 text-2xl font-bold md:text-3xl">ابدئي تسوقك مع سيدرا</h2>
+                <p className="mb-7 text-primary-foreground/85">
                   احصلي على خصم 10% على طلبك الأول واطلعي على أحدث العروض والمنتجات
                 </p>
+                <Button
+                  asChild
+                  size="lg"
+                  variant="secondary"
+                  className="bg-white text-primary hover:bg-white/90"
+                >
+                  <Link href="/shop">تسوقي الآن</Link>
+                </Button>
               </div>
             </div>
           </div>

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog"
 import { Search, Eye, Mail, Phone, MapPin, ShoppingBag, Calendar } from "lucide-react"
 import type { Customer, Order, Currency } from "@/lib/types"
+import { orderBelongsToCustomer } from "@/lib/customer-match"
 import { toast } from "sonner"
 
 // دوال مساعدة محلية (بدلاً من store.ts)
@@ -59,33 +60,33 @@ export default function AdminCustomersPage() {
   const [customerOrders, setCustomerOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
 
-  // جلب العملاء من API
-const fetchCustomers = async () => {
-  try {
-    const response = await fetch('/api/customers')
-    const data = await response.json()
-    const customersArray = Array.isArray(data) ? data : data.customers || []
-    setCustomers(customersArray)
-  } catch (error) {
-    console.error('Error fetching customers:', error)
-    toast.error('حدث خطأ في جلب العملاء')
-    setCustomers([])
+  const fetchCustomers = async () => {
+    try {
+      // بدون حد الصفحة الافتراضي (20) حتى تظهر كل الإحصائيات
+      const response = await fetch('/api/customers?limit=10000')
+      const data = await response.json()
+      const customersArray = Array.isArray(data) ? data : data.customers || []
+      setCustomers(customersArray)
+    } catch (error) {
+      console.error('Error fetching customers:', error)
+      toast.error('حدث خطأ في جلب العملاء')
+      setCustomers([])
+    }
   }
-}
 
-// جلب الطلبات من API
-const fetchOrders = async () => {
-  try {
-    const response = await fetch('/api/orders')
-    const data = await response.json()
-    const ordersArray = Array.isArray(data) ? data : data.orders || []
-    setOrders(ordersArray)
-  } catch (error) {
-    console.error('Error fetching orders:', error)
-    toast.error('حدث خطأ في جلب الطلبات')
-    setOrders([])
+  const fetchOrders = async () => {
+    try {
+      const response = await fetch('/api/orders?limit=10000')
+      const data = await response.json()
+      const ordersArray = Array.isArray(data) ? data : data.orders || []
+      setOrders(ordersArray)
+    } catch (error) {
+      console.error('Error fetching orders:', error)
+      toast.error('حدث خطأ في جلب الطلبات')
+      setOrders([])
+    }
   }
-}
+
   useEffect(() => {
     Promise.all([fetchCustomers(), fetchOrders()]).finally(() => setLoading(false))
     setCurrency(getCurrencyLocal())
@@ -96,26 +97,22 @@ const fetchOrders = async () => {
   }, [])
 
   const filteredCustomers = Array.isArray(customers)
-  ? customers.filter(
-      (customer) =>
-        customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        customer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        customer.phone.includes(searchQuery)
-    )
+  ? customers.filter((customer) => {
+      const q = searchQuery.toLowerCase()
+      return (
+        (customer.name || '').toLowerCase().includes(q) ||
+        (customer.email || '').toLowerCase().includes(q) ||
+        (customer.phone || '').includes(searchQuery)
+      )
+    })
   : []
 
-  const getCustomerOrders = (email: string) => {
-    return orders.filter((order) => order.customerEmail === email)
-  }
-
-  const getCustomerTotalSpent = (email: string) => {
-    const customerOrders = getCustomerOrders(email)
-    return customerOrders.reduce((total, order) => total + order.total, 0)
-  }
+  const getCustomerOrders = (customer: Customer) =>
+    orders.filter((order) => orderBelongsToCustomer(order, customer))
 
   const handleViewCustomer = (customer: Customer) => {
     setSelectedCustomer(customer)
-    setCustomerOrders(getCustomerOrders(customer.email))
+    setCustomerOrders(getCustomerOrders(customer))
   }
 
   if (loading) {
@@ -176,8 +173,19 @@ const fetchOrders = async () => {
                 </TableRow>
               ) : (
                 filteredCustomers.map((customer) => {
-                  const orderCount = getCustomerOrders(customer.email).length
-                  const totalSpent = getCustomerTotalSpent(customer.email)
+                  const customerOrderList = getCustomerOrders(customer)
+                  // الأولوية لعداد السيرفر (محسوب من كل الطلبات)، ثم المطابقة المحلية
+                  const orderCount = Math.max(
+                    Number(customer.ordersCount) || 0,
+                    customerOrderList.length
+                  )
+                  const totalSpent = Math.max(
+                    Number(customer.totalSpent) || 0,
+                    customerOrderList.reduce(
+                      (sum, order) => sum + Number(order.total || 0),
+                      0
+                    )
+                  )
                   return (
                     <TableRow key={customer.id}>
                       <TableCell>

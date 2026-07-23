@@ -1,22 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProductById, updateProduct, deleteProduct } from '@/lib/db';
 
-// ✅ GET - جلب منتج معين
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json(
+        { error: 'معرف المنتج غير صحيح' },
+        { status: 400 }
+      );
+    }
+
     const product = await getProductById(id);
-    
+
     if (!product) {
       return NextResponse.json(
         { error: 'المنتج غير موجود' },
         { status: 404 }
       );
     }
-    
+
     return NextResponse.json(product);
   } catch (error) {
     console.error('Error fetching product:', error);
@@ -27,7 +34,6 @@ export async function GET(
   }
 }
 
-// ✅ PUT - تحديث منتج (للمدير فقط)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -35,8 +41,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    
-    // ✅ 1. التحقق من وجود المنتج قبل التحديث
+
     const existingProduct = await getProductById(id);
     if (!existingProduct) {
       return NextResponse.json(
@@ -44,24 +49,15 @@ export async function PUT(
         { status: 404 }
       );
     }
-    
-    // ✅ 2. التحقق من البيانات الأساسية
-    if (!body.name || !body.price || !body.category) {
+
+    if (!body.name || body.price == null || !body.category) {
       return NextResponse.json(
         { error: 'الاسم والسعر والقسم حقول مطلوبة' },
         { status: 400 }
       );
     }
-    
-    // ✅ 3. التحقق من صلاحية المدير (مؤقتاً)
-    // const authHeader = request.headers.get('authorization');
-    // if (!authHeader) {
-    //   return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
-    // }
-    
+
     await updateProduct(id, body);
-    
-    // ✅ 4. إرجاع المنتج بعد التحديث
     const updatedProduct = await getProductById(id);
     return NextResponse.json({ success: true, product: updatedProduct });
   } catch (error) {
@@ -73,15 +69,13 @@ export async function PUT(
   }
 }
 
-// ✅ DELETE - حذف منتج (للمدير فقط)
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    
-    // ✅ 1. التحقق من وجود المنتج قبل الحذف
+
     const existingProduct = await getProductById(id);
     if (!existingProduct) {
       return NextResponse.json(
@@ -89,15 +83,8 @@ export async function DELETE(
         { status: 404 }
       );
     }
-    
-    // ✅ 2. التحقق من صلاحية المدير (مؤقتاً)
-    // const authHeader = request.headers.get('authorization');
-    // if (!authHeader) {
-    //   return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
-    // }
-    
+
     await deleteProduct(id);
-    
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting product:', error);

@@ -47,8 +47,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f5f0eb' },
-    { media: '(prefers-color-scheme: dark)', color: '#1a1614' },
+    { media: '(prefers-color-scheme: light)', color: '#faf6f5' },
+    { media: '(prefers-color-scheme: dark)', color: '#2a2220' },
   ],
 }
 
@@ -59,7 +59,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl" className={`${cairo.variable} ${geistMono.variable}`}>
-      <body className="font-sans antialiased min-h-screen pb-16 md:pb-0">
+      <body className={`${cairo.className} font-sans antialiased min-h-screen pb-20 md:pb-0`}>
         {children}
         <MobileNav />
         <Toaster
@@ -69,6 +69,7 @@ export default function RootLayout({
           toastOptions={{
             style: {
               direction: 'rtl',
+              borderRadius: '1rem',
             },
           }}
         />

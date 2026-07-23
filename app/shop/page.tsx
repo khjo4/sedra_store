@@ -352,11 +352,11 @@ useEffect(() => {
     <>
       <Header />
 
-      <main className="min-h-screen py-8">
+      <main className="min-h-screen py-8 md:py-12">
         <div className="container mx-auto px-4">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">المتجر</h1>
+            <h1 className="mb-2 text-3xl font-bold tracking-tight">المتجر</h1>
             <p className="text-muted-foreground">
               {filteredProducts.length} منتج
               {searchQuery && ` - نتائج البحث عن "${searchQuery}"`}
@@ -365,10 +365,10 @@ useEffect(() => {
 
           <div className="flex gap-8">
             {/* Desktop Filters */}
-            <aside className="hidden lg:block w-64 shrink-0">
-              <div className="sticky top-24 glass-strong rounded-xl p-6">
-                <h2 className="font-semibold mb-4 flex items-center gap-2">
-                  <SlidersHorizontal className="h-5 w-5" />
+            <aside className="hidden w-64 shrink-0 lg:block">
+              <div className="sticky top-24 rounded-2xl border border-border/50 bg-card/80 p-6 shadow-[0_12px_40px_-28px_oklch(0.35_0.04_20/0.35)] backdrop-blur-xl">
+                <h2 className="mb-4 flex items-center gap-2 font-semibold">
+                  <SlidersHorizontal className="h-5 w-5 text-primary" />
                   الفلاتر
                 </h2>
                 <FiltersSidebar />

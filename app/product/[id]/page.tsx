@@ -15,34 +15,19 @@ import { ProductCard } from '@/components/product-card'
 import { cn, formatPrice, fetchExchangeRate } from '@/lib/utils'
 import type { Product, Currency } from '@/lib/types'
 import { toast } from 'sonner'
+import {
+  getCart,
+  saveCart,
+  sameCartVariant,
+  isInWishlist,
+  toggleWishlistId,
+} from '@/lib/cart-wishlist'
 
-// ================================================
-// دوال السلة والمفضلة (مؤقتاً)
-// ================================================
-const CART_KEY = 'sedra_cart'
-const WISHLIST_KEY = 'sedra_wishlist'
-
-const getCart = () => {
-  if (typeof window === 'undefined') return []
-  const cart = localStorage.getItem(CART_KEY)
-  return cart ? JSON.parse(cart) : []
-}
-
-const saveCart = (cart: any[]) => {
-  localStorage.setItem(CART_KEY, JSON.stringify(cart))
-  window.dispatchEvent(new Event('cartUpdated'))
-}
-
-const getWishlist = (): string[] => {
-  if (typeof window === 'undefined') return []
-  const wishlist = localStorage.getItem(WISHLIST_KEY)
-  return wishlist ? JSON.parse(wishlist) : []
-}
-
-const saveWishlist = (wishlist: string[]) => {
-  localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist))
-  window.dispatchEvent(new Event('wishlistUpdated'))
-}
+const isVariantInCart = (
+  productId: string,
+  color?: string,
+  size?: string
+) => getCart().some((item) => sameCartVariant(item, productId, color, size))
 
 export default function ProductPage() {
   const router = useRouter()
@@ -59,11 +44,15 @@ export default function ProductPage() {
   const [selectedSize, setSelectedSize] = useState<string>('')
   const [quantity, setQuantity] = useState(1)
   const [isWishlisted, setIsWishlisted] = useState(false)
+  const [inCart, setInCart] = useState(false)
   const [imageError, setImageError] = useState(false)
   
   // حالات للأسعار المنسقة
   const [formattedPrice, setFormattedPrice] = useState('')
   const [formattedOriginalPrice, setFormattedOriginalPrice] = useState('')
+  const [shippingInfo, setShippingInfo] = useState({
+    freeThreshold: 0,
+  })
 
   // ================================================
   // جلب المنتج من API
@@ -90,9 +79,7 @@ export default function ProductPage() {
         setSelectedColor(safeProduct.colors?.[0] || '')
         setSelectedSize(safeProduct.sizes?.[0] || '')
         
-        // التحقق من وجود المنتج في المفضلة
-        const wishlist = getWishlist()
-        setIsWishlisted(wishlist.includes(safeProduct.id))
+        setIsWishlisted(isInWishlist(String(safeProduct.id)))
       } catch (error) {
         console.error('Error fetching product:', error)
         setProduct(null)
@@ -100,9 +87,20 @@ export default function ProductPage() {
         setLoading(false)
       }
     }
-    
+
     fetchProduct()
   }, [id])
+
+  // تحديث حالة «في السلة» حسب اللون/المقاس المختار
+  useEffect(() => {
+    if (!product) return
+    const sync = () => {
+      setInCart(isVariantInCart(product.id, selectedColor, selectedSize))
+    }
+    sync()
+    window.addEventListener('cartUpdated', sync)
+    return () => window.removeEventListener('cartUpdated', sync)
+  }, [product, selectedColor, selectedSize])
 
   // ================================================
   // تحميل العملة وسعر الصرف
@@ -118,6 +116,18 @@ export default function ProductPage() {
     }
     
     loadCurrency()
+
+    fetch('/api/settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return
+        setShippingInfo({
+          freeThreshold: Number(
+            data.freeShippingThreshold ?? data.free_shipping_threshold ?? 0
+          ),
+        })
+      })
+      .catch(() => {})
     
     const handleCurrencyChange = () => {
       loadCurrency()
@@ -192,33 +202,32 @@ export default function ProductPage() {
   }
 
   const handleAddToCart = () => {
-    if (product?.sizes && product.sizes.length > 0 && !selectedSize) {
+    if (!product) return
+
+    // الزر يعرض «في السلة» — لا تضف مرة ثانية، اذهب للسلة
+    if (inCart || isVariantInCart(product.id, selectedColor, selectedSize)) {
+      router.push('/cart')
+      return
+    }
+
+    if (product.sizes && product.sizes.length > 0 && !selectedSize) {
       toast.error('الرجاء اختيار المقاس')
       return
     }
 
     const cart = getCart()
-    const existingIndex = cart.findIndex(
-      (item: any) => item.productId === product?.id && 
-                     item.selectedColor === selectedColor && 
-                     item.selectedSize === selectedSize
-    )
-    
-    if (existingIndex > -1) {
-      cart[existingIndex].quantity += quantity
-    } else {
-      cart.push({
-        productId: product?.id,
-        quantity,
-        selectedColor,
-        selectedSize,
-      })
-    }
-    
+    cart.push({
+      productId: String(product.id),
+      quantity,
+      selectedColor: selectedColor || '',
+      selectedSize: selectedSize || '',
+    })
+
     saveCart(cart)
-    
+    setInCart(true)
+
     toast.success('تمت الإضافة إلى السلة', {
-      description: `${product?.name} (${quantity})`,
+      description: `${product.name} (${quantity})`,
       action: {
         label: 'عرض السلة',
         onClick: () => router.push('/cart'),
@@ -228,45 +237,31 @@ export default function ProductPage() {
 
   const handleWishlist = async () => {
     if (!product) return
-    
-    const customerEmail = localStorage.getItem('user_email') || 'guest@sedra.com'
-    
-    if (isWishlisted) {
-      try {
-        const response = await fetch(`/api/wishlist?email=${customerEmail}&productId=${product.id}`, {
-          method: 'DELETE',
-        })
-        
-        if (!response.ok) throw new Error('Failed to remove')
-        
-        setIsWishlisted(false)
-        toast.info('تمت الإزالة من المفضلة')
-      } catch (error) {
-        console.error('Error removing from wishlist:', error)
-        toast.error('حدث خطأ في إزالة المنتج من المفضلة')
-      }
-    } else {
-      try {
-        const response = await fetch('/api/wishlist', {
+
+    const productId = String(product.id)
+    const adding = toggleWishlistId(productId)
+    setIsWishlisted(adding)
+    toast[adding ? 'success' : 'info'](
+      adding ? 'تمت الإضافة إلى المفضلة' : 'تمت الإزالة من المفضلة'
+    )
+
+    try {
+      if (adding) {
+        await fetch('/api/wishlist', {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            customerEmail: customerEmail,
-            productId: product.id,
-          }),
+          body: JSON.stringify({ productId }),
         })
-        
-        if (!response.ok) throw new Error('Failed to add')
-        
-        setIsWishlisted(true)
-        toast.success('تمت الإضافة إلى المفضلة')
-      } catch (error) {
-        console.error('Error adding to wishlist:', error)
-        toast.error('حدث خطأ في إضافة المنتج للمفضلة')
+      } else {
+        await fetch(`/api/wishlist?productId=${encodeURIComponent(productId)}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
       }
+    } catch {
+      // الزائر يعتمد على localStorage فقط
     }
-    
-    window.dispatchEvent(new Event('wishlistUpdated'))
   }
 
   const discount = product?.originalPrice
@@ -450,7 +445,7 @@ export default function ProductPage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      disabled={quantity <= 1}
+                      disabled={inCart || quantity <= 1}
                     >
                       <Minus className="h-4 w-4" />
                     </Button>
@@ -459,13 +454,14 @@ export default function ProductPage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-                      disabled={quantity >= product.stock}
+                      disabled={inCart || quantity >= product.stock}
                     >
                       <Plus className="h-4 w-4" />
                     </Button>
                   </div>
                   <span className="text-sm text-muted-foreground">
                     {product.stock > 0 ? `${product.stock} متوفر` : 'نفذت الكمية'}
+                    {inCart ? ' · عدّلي الكمية من السلة' : ''}
                   </span>
                 </div>
               </div>
@@ -477,9 +473,14 @@ export default function ProductPage() {
                   className="flex-1 gap-2"
                   onClick={handleAddToCart}
                   disabled={product.stock === 0}
+                  variant={inCart ? 'secondary' : 'default'}
                 >
-                  <ShoppingBag className="h-5 w-5" />
-                  {product.stock === 0 ? 'نفذت الكمية' : 'أضيفي للسلة'}
+                  <ShoppingBag className={cn('h-5 w-5', inCart && 'fill-current')} />
+                  {product.stock === 0
+                    ? 'نفذت الكمية'
+                    : inCart
+                      ? 'في السلة — عرض السلة'
+                      : 'أضيفي للسلة'}
                 </Button>
                 <Button
                   size="lg"
@@ -541,7 +542,12 @@ export default function ProductPage() {
                 <TabsContent value="shipping" className="mt-4">
                   <ul className="space-y-2 text-sm text-muted-foreground">
                     <li>التوصيل خلال 3-5 أيام عمل</li>
-                    <li>شحن مجاني للطلبات فوق 70$</li>
+                    <li>شحن إدلب: $2 — باقي المحافظات: $3</li>
+                    <li>
+                      {shippingInfo.freeThreshold > 0
+                        ? `شحن مجاني للطلبات فوق $${shippingInfo.freeThreshold}`
+                        : 'الشحن المجاني غير مفعّل حالياً'}
+                    </li>
                     <li>الدفع عند الاستلام متاح</li>
                   </ul>
                 </TabsContent>

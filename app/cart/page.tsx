@@ -11,47 +11,51 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { cn, formatPrice, fetchExchangeRate } from '@/lib/utils'
-import type { CartItem, Product, Currency, Coupon } from '@/lib/types'
+import type { Product, Currency, Coupon } from '@/lib/types'
 import { toast } from 'sonner'
+import {
+  getCart,
+  saveCart,
+  clearLocalCart,
+  sameId,
+  type LocalCartItem,
+} from '@/lib/cart-wishlist'
 
-interface CartItemWithProduct extends CartItem {
+interface CartItemWithProduct extends LocalCartItem {
   product: Product
 }
 
-const CART_KEY = 'sedra_cart'
-
-const getCart = (): CartItem[] => {
-  if (typeof window === 'undefined') return []
-  const cart = localStorage.getItem(CART_KEY)
-  return cart ? JSON.parse(cart) : []
-}
-
-const saveCart = (cart: CartItem[]) => {
-  localStorage.setItem(CART_KEY, JSON.stringify(cart))
-  window.dispatchEvent(new Event('cartUpdated'))
-}
-
-const updateCartItem = (productId: string, quantity: number, color?: string, size?: string) => {
+const updateCartItem = (
+  productId: string,
+  quantity: number,
+  color?: string,
+  size?: string
+) => {
   const cart = getCart()
-  const index = cart.findIndex(i => i.productId === productId && i.selectedColor === color && i.selectedSize === size)
+  const index = cart.findIndex(
+    (i) =>
+      sameId(i.productId, productId) &&
+      (i.selectedColor || '') === (color || '') &&
+      (i.selectedSize || '') === (size || '')
+  )
   if (index > -1) {
-    if (quantity <= 0) {
-      cart.splice(index, 1)
-    } else {
-      cart[index].quantity = quantity
-    }
+    if (quantity <= 0) cart.splice(index, 1)
+    else cart[index].quantity = quantity
     saveCart(cart)
   }
 }
 
 const removeFromCart = (productId: string, color?: string, size?: string) => {
-  const newCart = getCart().filter(i => !(i.productId === productId && i.selectedColor === color && i.selectedSize === size))
-  saveCart(newCart)
-}
-
-const clearCart = () => {
-  localStorage.removeItem(CART_KEY)
-  window.dispatchEvent(new Event('cartUpdated'))
+  saveCart(
+    getCart().filter(
+      (i) =>
+        !(
+          sameId(i.productId, productId) &&
+          (i.selectedColor || '') === (color || '') &&
+          (i.selectedSize || '') === (size || '')
+        )
+    )
+  )
 }
 
 // ================================================
@@ -59,31 +63,31 @@ const clearCart = () => {
 // ================================================
 const validateCouponLocal = async (code: string, subtotal: number): Promise<{ valid: boolean; coupon?: Coupon; error?: string }> => {
   try {
-    const response = await fetch(`/api/coupons?code=${code}`)
+    const response = await fetch(`/api/coupons?code=${encodeURIComponent(code.trim())}`)
+    if (!response.ok) {
+      return { valid: false, error: 'حدث خطأ في التحقق من الكوبون' }
+    }
     const coupons = await response.json()
-    const coupon = coupons.find((c: Coupon) => c.code.toLowerCase() === code.toLowerCase())
+    if (!Array.isArray(coupons)) {
+      return { valid: false, error: 'حدث خطأ في التحقق من الكوبون' }
+    }
+    const coupon = coupons.find((c: Coupon) => c.code.toLowerCase() === code.trim().toLowerCase())
     
     if (!coupon) return { valid: false, error: 'كود الخصم غير صحيح' }
     if (!coupon.active) return { valid: false, error: 'كود الخصم غير مفعل' }
-    if (new Date(coupon.expiresAt) < new Date()) return { valid: false, error: 'كود الخصم منتهي الصلاحية' }
-    if (coupon.usedCount >= coupon.maxUses) return { valid: false, error: 'تم استخدام كود الخصم بالكامل' }
-    if (subtotal < coupon.minPurchase) return { valid: false, error: `الحد الأدنى للشراء ${coupon.minPurchase}$` }
+    if (coupon.expiresAt && new Date(coupon.expiresAt) < new Date()) {
+      return { valid: false, error: 'كود الخصم منتهي الصلاحية' }
+    }
+    if (coupon.maxUses > 0 && coupon.usedCount >= coupon.maxUses) {
+      return { valid: false, error: 'تم استخدام كود الخصم بالكامل' }
+    }
+    if (subtotal < (coupon.minPurchase || 0)) {
+      return { valid: false, error: `الحد الأدنى للشراء ${coupon.minPurchase}$` }
+    }
     
     return { valid: true, coupon }
   } catch (error) {
     return { valid: false, error: 'حدث خطأ في التحقق من الكوبون' }
-  }
-}
-
-const updateCouponUsage = async (code: string) => {
-  try {
-    await fetch('/api/coupons', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
-    })
-  } catch (error) {
-    console.error('Error updating coupon usage:', error)
   }
 }
 
@@ -135,15 +139,19 @@ export default function CartPage() {
     }
     
     try {
-      // تحسين الأداء: جلب المنتجات المحددة فقط
-      const ids = cart.map(item => item.productId).join(',')
-      const response = await fetch(`/api/products?ids=${ids}`)
+      const ids = cart.map((item) => item.productId).join(',')
+      const response = await fetch(`/api/products?ids=${encodeURIComponent(ids)}`, {
+        cache: 'no-store',
+      })
+      if (!response.ok) throw new Error('failed to load products')
       const data = await response.json()
       const allProducts = Array.isArray(data) ? data : data.products || []
       
       const itemsWithProducts = cart
         .map((item) => {
-          const product = allProducts.find((p: Product) => p.id === item.productId)
+          const product = allProducts.find((p: Product) =>
+            sameId(p.id, item.productId)
+          )
           if (!product) return null
           return { ...item, product }
         })
@@ -153,6 +161,7 @@ export default function CartPage() {
     } catch (error) {
       console.error('Error loading cart:', error)
       toast.error('حدث خطأ في تحميل السلة')
+      setCartItems([])
     } finally {
       setLoading(false)
     }
@@ -235,10 +244,16 @@ export default function CartPage() {
   // ================================================
   // 8. القيم المعتمدة على settings
   // ================================================
-  const freeShippingThreshold = settings?.free_shipping_threshold || 70
-  const shippingCost = settings?.shipping_cost || 2
+  const freeShippingThreshold = Number(
+    settings?.freeShippingThreshold ?? settings?.free_shipping_threshold ?? 0
+  )
+  // تقدير الشحن في السلة قبل اختيار المدينة (أغلب المحافظات $3)
+  const estimatedShippingCost = 3
 
-  const shipping = subtotal - discount >= freeShippingThreshold ? 0 : shippingCost
+  const shipping =
+    freeShippingThreshold > 0 && subtotal - discount >= freeShippingThreshold
+      ? 0
+      : estimatedShippingCost
   const total = subtotal - discount + shipping
 
   // ================================================
@@ -260,10 +275,16 @@ export default function CartPage() {
       const totalFormatted = formatPrice(total, currency, exchangeRate)
       setFormattedTotal(totalFormatted)
       
-      if (shipping > 0) {
+      if (shipping > 0 && freeShippingThreshold > 0) {
         const remaining = freeShippingThreshold - (subtotal - discount)
-        const remainingFormatted = formatPrice(remaining, currency, exchangeRate)
-        setFormattedShippingRemaining(remainingFormatted)
+        if (remaining > 0) {
+          const remainingFormatted = formatPrice(remaining, currency, exchangeRate)
+          setFormattedShippingRemaining(remainingFormatted)
+        } else {
+          setFormattedShippingRemaining('')
+        }
+      } else {
+        setFormattedShippingRemaining('')
       }
     }
     
@@ -290,7 +311,7 @@ export default function CartPage() {
   }
 
   const handleClearCart = () => {
-    clearCart()
+    clearLocalCart()
     setCartItems([])
     setAppliedCoupon(null)
     toast.success('تم إفراغ السلة')
@@ -300,7 +321,6 @@ export default function CartPage() {
     setCouponError('')
     const result = await validateCouponLocal(couponCode, subtotal)
     if (result.valid && result.coupon) {
-      await updateCouponUsage(couponCode)
       setAppliedCoupon(result.coupon)
       toast.success('تم تطبيق كود الخصم')
     } else {

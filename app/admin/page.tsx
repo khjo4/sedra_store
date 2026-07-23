@@ -52,7 +52,7 @@ export default function AdminDashboard() {
 const fetchStats = async () => {
   try {
     const [ordersRes, productsRes] = await Promise.all([
-      fetch('/api/orders'),
+      fetch('/api/orders?limit=10000'),
       fetch('/api/products')
     ])
     
@@ -74,7 +74,7 @@ const fetchStats = async () => {
     // جلب العملاء
     let totalCustomers = 0
     try {
-      const customersRes = await fetch('/api/customers')
+      const customersRes = await fetch('/api/customers?limit=10000')
       const customersData = await customersRes.json()
       const customers = Array.isArray(customersData) ? customersData : customersData.customers || []
       totalCustomers = customers.length
@@ -136,15 +136,19 @@ const fetchStats = async () => {
     setFormattedOrderTotals(updatedOrderTotals)
   }, [currency, exchangeRate, stats.totalRevenue, recentOrders])
 
-  // Check authentication
+  // Check authentication against httpOnly JWT via API
   useEffect(() => {
-    const token = localStorage.getItem('admin_token')
-    if (!token) {
-      router.push('/admin/login')
-    } else {
-      setIsAuthenticated(true)
-    }
-    setLoading(false)
+    fetch('/api/admin/me')
+      .then((res) => {
+        if (!res.ok) throw new Error('unauthorized')
+        localStorage.setItem('admin_token', '1')
+        setIsAuthenticated(true)
+      })
+      .catch(() => {
+        localStorage.removeItem('admin_token')
+        router.push('/admin/login')
+      })
+      .finally(() => setLoading(false))
   }, [router])
 
   useEffect(() => {
@@ -153,15 +157,18 @@ const fetchStats = async () => {
     fetchStats()
   }, [isAuthenticated, currency, exchangeRate])
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' })
+    } catch {
+      // ignore network errors — still clear local UI state
+    }
     localStorage.removeItem('admin_token')
-  
-  // ✅ نشر حدث لتحديث جميع المكونات
-  window.dispatchEvent(new Event('storage'))
-  window.dispatchEvent(new Event('adminLogout'))
-  
-  router.push('/')
-}
+    window.dispatchEvent(new Event('storage'))
+    window.dispatchEvent(new Event('adminLogout'))
+    router.push('/')
+    router.refresh()
+  }
 
   if (loading) {
     return (

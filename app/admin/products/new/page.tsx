@@ -58,7 +58,6 @@ export default function AdminNewProductPage() {
 
     try {
       const newProduct = {
-        id: `p${Date.now()}`,
         name: formData.name,
         nameEn: formData.nameEn || formData.name,
         description: formData.description,
@@ -66,22 +65,29 @@ export default function AdminNewProductPage() {
         price: parseFloat(formData.price),
         originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : null,
         category: formData.category,
-        images: formData.images ? formData.images.split(',').map(img => img.trim()) : ['/placeholder.jpg'],
-        stock: parseInt(formData.stock),
+        images: formData.images
+          ? formData.images.split(',').map((img) => img.trim()).filter(Boolean)
+          : [],
+        stock: parseInt(formData.stock || '0', 10) || 0,
         featured: formData.featured,
         bestSeller: formData.bestSeller,
         newArrival: formData.newArrival,
-        colors: formData.colors ? formData.colors.split(',').map(c => c.trim()) : [],
-        sizes: formData.sizes ? formData.sizes.split(',').map(s => s.trim()) : [],
+        colors: formData.colors
+          ? formData.colors.split(',').map((c) => c.trim()).filter(Boolean)
+          : [],
+        sizes: formData.sizes
+          ? formData.sizes.split(',').map((s) => s.trim()).filter(Boolean)
+          : [],
         rating: 0,
         reviewCount: 0,
       }
 
-      console.log('Sending new product:', newProduct) // للتأكد من البيانات
+      console.log('Sending new product:', newProduct)
        
       const response = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(newProduct),
       })
 
@@ -89,14 +95,16 @@ export default function AdminNewProductPage() {
       console.log('Response:', result)
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to create product')
+        throw new Error(result.detail || result.error || 'Failed to create product')
       }
 
       toast.success('تم إضافة المنتج بنجاح')
       router.push('/admin/products')
     } catch (error) {
       console.error('Error creating product:', error)
-      toast.error('حدث خطأ أثناء إضافة المنتج')
+      toast.error(
+        error instanceof Error ? error.message : 'حدث خطأ أثناء إضافة المنتج'
+      )
     } finally {
       setLoading(false)
     }

@@ -49,11 +49,12 @@ const createCouponAPI = async (couponData: any): Promise<any> => {
   const response = await fetch('/api/coupons', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify(couponData),
   })
   const data = await response.json()
   if (!response.ok) {
-    throw new Error(data.error || 'فشل إنشاء الكوبون')
+    throw new Error(data.detail || data.error || 'فشل إنشاء الكوبون')
   }
   return data
 }
@@ -195,7 +196,7 @@ export default function AdminCouponsPage() {
   }
 
   const isCouponExhausted = (coupon: Coupon) => {
-    if (!coupon.maxUses) return false
+    if (!coupon.maxUses || coupon.maxUses <= 0) return false
     return coupon.usedCount >= coupon.maxUses
   }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAllProducts, createProduct } from '@/lib/db';
-import { revalidateTag } from 'next/cache';
+import { revalidatePath } from 'next/cache';
 
 // GET - جلب جميع المنتجات (مع دعم Filtering و Pagination)
 export async function GET(request: Request) {
@@ -105,22 +105,44 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     
-    if (!body.name || body.price == null || !body.category) {
+    if (!body.name || body.price == null || Number.isNaN(Number(body.price)) || !body.category) {
       return NextResponse.json(
         { error: 'الاسم والسعر والقسم حقول مطلوبة' },
         { status: 400 }
       );
     }
-    
-    const newProduct = await createProduct(body);
-    
-    revalidateTag('/', 'layout');
+
+    const newProduct = await createProduct({
+      ...body,
+      price: Number(body.price),
+      originalPrice:
+        body.originalPrice === '' || body.originalPrice == null
+          ? null
+          : Number(body.originalPrice),
+      stock: Number(body.stock) || 0,
+      images: Array.isArray(body.images) ? body.images : [],
+      colors: Array.isArray(body.colors) ? body.colors : [],
+      sizes: Array.isArray(body.sizes) ? body.sizes : [],
+    });
+
+    try {
+      revalidatePath('/');
+      revalidatePath('/shop');
+      revalidatePath('/admin/products');
+    } catch (revalidateError) {
+      console.error('revalidatePath failed:', revalidateError);
+    }
     
     return NextResponse.json(newProduct, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating product:', error);
+    const detail =
+      error?.code || error?.sqlMessage || error?.message || 'unknown';
     return NextResponse.json(
-      { error: 'حدث خطأ في إضافة المنتج' },
+      {
+        error: 'حدث خطأ في إضافة المنتج',
+        detail: String(detail),
+      },
       { status: 500 }
     );
   }

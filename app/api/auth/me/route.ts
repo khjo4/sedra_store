@@ -6,12 +6,13 @@ export async function GET() {
   try {
     const session = await getSession();
     if (!session) {
-      return NextResponse.json({ error: 'غير مصرح به' }, { status: 401 });
+      // 200 بدل 401 حتى لا يملأ Console أخطاء للزائر
+      return NextResponse.json({ user: null });
     }
 
     const customer = await getCustomerById(session.id);
     if (!customer) {
-      return NextResponse.json({ error: 'المستخدم غير موجود' }, { status: 404 });
+      return NextResponse.json({ user: null });
     }
 
     return NextResponse.json({

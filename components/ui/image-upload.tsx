@@ -29,7 +29,10 @@ export function ImageUpload({ value, onChange, maxFiles = 5 }: ImageUploadProps)
     try {
       const uploaded = await startUpload(Array.from(files))
       if (uploaded) {
-        const newUrls = [...value, ...uploaded.map((file) => file.url)]
+        const newUrls = [
+          ...value,
+          ...uploaded.map((file: any) => file.ufsUrl || file.url).filter(Boolean),
+        ]
         onChange(newUrls)
       }
     } catch (error) {

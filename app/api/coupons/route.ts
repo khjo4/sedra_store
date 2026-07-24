@@ -82,10 +82,13 @@ export async function POST(request: Request) {
       expiresAt: body.expiresAt || null,
     });
     return NextResponse.json({ success: true, coupon: newCoupon }, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating coupon:', error);
     return NextResponse.json(
-      { error: 'حدث خطأ في إضافة الكوبون' },
+      {
+        error: 'حدث خطأ في إضافة الكوبون',
+        detail: String(error?.sqlMessage || error?.code || error?.message || 'unknown'),
+      },
       { status: 500 }
     );
   }

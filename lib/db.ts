@@ -131,22 +131,20 @@ export async function getProductsByIds(ids: string[]) {
 }
 
 export async function createProduct(productData: any) {
-  const id = productData.id || randomUUID();
-  
-  await query(
+  // جدول المنتجات يستخدم id رقمي AUTO_INCREMENT — لا نُدرج id نصي مثل p123...
+  const result: any = await query(
     `INSERT INTO products 
-      (id, name, name_en, description, description_en, price, original_price, 
+      (name, name_en, description, description_en, price, original_price, 
        category, stock, featured, best_seller, new_arrival, 
        rating, review_count, images, colors, sizes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      id,
       productData.name,
       productData.nameEn || '',
       productData.description || '',
       productData.descriptionEn || '',
       productData.price,
-      productData.originalPrice || null,
+      productData.originalPrice ?? null,
       productData.category,
       productData.stock || 0,
       productData.featured ? 1 : 0,
@@ -156,14 +154,22 @@ export async function createProduct(productData: any) {
       productData.reviewCount || 0,
       JSON.stringify(productData.images || []),
       JSON.stringify(productData.colors || []),
-      JSON.stringify(productData.sizes || [])
+      JSON.stringify(productData.sizes || []),
     ]
   );
-  
-  // ✅ تحديث عدد المنتجات في القسم
-  await updateCategoryProductCount(productData.category);
-  
-  return { id, ...productData };
+
+  const id = String(result.insertId);
+
+  try {
+    await updateCategoryProductCount(productData.category);
+  } catch (err) {
+    console.error('updateCategoryProductCount failed:', err);
+  }
+
+  return {
+    id,
+    ...productData,
+  };
 }
 
 // تحديث عدد المنتجات في القسم
@@ -399,20 +405,28 @@ export async function createOrderSecure(input: {
 
     if (input.couponCode) {
       const [couponRows] = await conn.execute(
-        'SELECT * FROM coupons WHERE code = ? FOR UPDATE',
-        [input.couponCode.toUpperCase()]
+        'SELECT * FROM coupons WHERE UPPER(code) = ? FOR UPDATE',
+        [input.couponCode.toUpperCase().trim()]
       );
       const coupon = (couponRows as any[])[0];
-      if (!coupon || !coupon.active) {
+      const isActive =
+        coupon &&
+        (coupon.active === 1 ||
+          coupon.active === true ||
+          coupon.active === '1');
+      if (!coupon || !isActive) {
         throw new Error('كود الخصم غير صالح');
       }
       if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
         throw new Error('كود الخصم منتهي الصلاحية');
       }
-      if (Number(coupon.used_count) >= Number(coupon.max_uses)) {
+      const maxUses = Number(coupon.max_uses) || 0;
+      const usedCount = Number(coupon.used_count) || 0;
+      // max_uses = 0 يعني غير محدود
+      if (maxUses > 0 && usedCount >= maxUses) {
         throw new Error('تم استخدام كود الخصم بالكامل');
       }
-      if (subtotal < Number(coupon.min_purchase)) {
+      if (subtotal < Number(coupon.min_purchase || 0)) {
         throw new Error(`الحد الأدنى للشراء ${coupon.min_purchase}`);
       }
 
@@ -422,12 +436,15 @@ export async function createOrderSecure(input: {
         discount = Number(coupon.value);
       }
       discount = Math.min(discount, subtotal);
-      couponCode = coupon.code;
+      couponCode = String(coupon.code).toUpperCase();
 
-      await conn.execute(
-        'UPDATE coupons SET used_count = used_count + 1 WHERE id = ?',
+      const [usageResult] = await conn.execute(
+        'UPDATE coupons SET used_count = COALESCE(used_count, 0) + 1 WHERE id = ?',
         [coupon.id]
       );
+      if ((usageResult as any).affectedRows !== 1) {
+        throw new Error('فشل تحديث عدد استخدامات الكوبون');
+      }
     }
 
     const [settingsRows] = await conn.execute(
@@ -500,13 +517,13 @@ export async function getAllCoupons() {
   const rows = await query('SELECT * FROM coupons ORDER BY created_at DESC');
   
   return (rows as any[]).map(coupon => ({
-    id: coupon.id,
+    id: String(coupon.id),
     code: coupon.code,
     type: coupon.type,
     value: Number(coupon.value),
     minPurchase: Number(coupon.min_purchase),
     maxUses: Number(coupon.max_uses),
-    usedCount: Number(coupon.used_count),
+    usedCount: Number(coupon.used_count) || 0,
     active: toBoolean(coupon.active),
     expiresAt: coupon.expires_at,
     createdAt: coupon.created_at,
@@ -514,18 +531,20 @@ export async function getAllCoupons() {
 }
 
 export async function getCouponByCode(code: string) {
-  const rows = await query('SELECT * FROM coupons WHERE code = ?', [code.toUpperCase()]);
+  const rows = await query('SELECT * FROM coupons WHERE UPPER(code) = ?', [
+    code.toUpperCase().trim(),
+  ]);
   const coupon = (rows as any[])[0];
   if (!coupon) return null;
   
   return {
-    id: coupon.id,
+    id: String(coupon.id),
     code: coupon.code,
     type: coupon.type,
     value: Number(coupon.value),
     minPurchase: Number(coupon.min_purchase),
     maxUses: Number(coupon.max_uses),
-    usedCount: Number(coupon.used_count),
+    usedCount: Number(coupon.used_count) || 0,
     active: toBoolean(coupon.active),
     expiresAt: coupon.expires_at,
     createdAt: coupon.created_at,
@@ -552,43 +571,89 @@ export async function getCouponById(id: string) {
 }
 
 export async function createCoupon(couponData: any) {
-  const id = couponData.id || `CPN-${randomUUID().slice(0, 8)}`;
-  
-  await query(
-    `INSERT INTO coupons 
-      (id, code, type, value, min_purchase, max_uses, used_count, active, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      id,
-      couponData.code.toUpperCase(),
-      couponData.type,
-      couponData.value,
-      couponData.minPurchase || 0,
-      couponData.maxUses || 100,
-      couponData.usedCount || 0,
-      couponData.active ? 1 : 0,
-      couponData.expiresAt || null
-    ]
-  );
-  
-  return { id, ...couponData };
+  // جدول الكوبونات غالباً id رقمي AUTO_INCREMENT — لا نُدرج CPN-...
+  const expiresAt = normalizeMysqlDateTime(couponData.expiresAt);
+  const maxUsesRaw = Number(couponData.maxUses);
+  const maxUses =
+    Number.isFinite(maxUsesRaw) && maxUsesRaw > 0 ? maxUsesRaw : 0; // 0 = غير محدود
+  const code = String(couponData.code).toUpperCase().trim();
+  const active = couponData.active === false || couponData.active === 0 ? 0 : 1;
+  const payload = [
+    code,
+    couponData.type,
+    Number(couponData.value),
+    Number(couponData.minPurchase) || 0,
+    maxUses,
+    0,
+    active,
+    expiresAt,
+  ];
+
+  let id = '';
+  try {
+    const result: any = await query(
+      `INSERT INTO coupons 
+        (code, type, value, min_purchase, max_uses, used_count, active, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      payload
+    );
+    id = String(result.insertId);
+  } catch (error: any) {
+    // إن كان id نصي بدون AUTO_INCREMENT
+    const msg = String(error?.sqlMessage || error?.message || '');
+    if (!msg.toLowerCase().includes('id') && error?.code !== 'ER_NO_DEFAULT_FOR_FIELD') {
+      throw error;
+    }
+    id = `CPN-${randomUUID().slice(0, 8)}`;
+    await query(
+      `INSERT INTO coupons 
+        (id, code, type, value, min_purchase, max_uses, used_count, active, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, ...payload]
+    );
+  }
+
+  return {
+    id,
+    code,
+    type: couponData.type,
+    value: Number(couponData.value),
+    minPurchase: Number(couponData.minPurchase) || 0,
+    maxUses,
+    usedCount: 0,
+    active: active === 1,
+    expiresAt,
+  };
+}
+
+function normalizeMysqlDateTime(value: unknown): string | null {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(d.getTime())) return null;
+  // YYYY-MM-DD HH:MM:SS (UTC) — متوافق مع MySQL DATETIME
+  return d.toISOString().slice(0, 19).replace('T', ' ');
 }
 
 export async function updateCoupon(id: string, couponData: any) {
+  const expiresAt = normalizeMysqlDateTime(couponData.expiresAt);
+  const maxUsesRaw = Number(couponData.maxUses);
+  const maxUses =
+    Number.isFinite(maxUsesRaw) && maxUsesRaw > 0 ? maxUsesRaw : 0;
+
   await query(
     `UPDATE coupons SET 
       code = ?, type = ?, value = ?, min_purchase = ?, 
       max_uses = ?, active = ?, expires_at = ?
      WHERE id = ?`,
     [
-      couponData.code.toUpperCase(),
+      String(couponData.code).toUpperCase().trim(),
       couponData.type,
-      couponData.value,
-      couponData.minPurchase || 0,
-      couponData.maxUses || 100,
-      couponData.active ? 1 : 0,
-      couponData.expiresAt || null,
-      id
+      Number(couponData.value),
+      Number(couponData.minPurchase) || 0,
+      maxUses,
+      couponData.active === false || couponData.active === 0 ? 0 : 1,
+      expiresAt,
+      id,
     ]
   );
 }
@@ -598,7 +663,10 @@ export async function deleteCoupon(id: string) {
 }
 
 export async function incrementCouponUsage(code: string) {
-  await query('UPDATE coupons SET used_count = used_count + 1 WHERE code = ? AND active = 1', [code]);
+  await query(
+    'UPDATE coupons SET used_count = COALESCE(used_count, 0) + 1 WHERE UPPER(code) = ? AND active = 1',
+    [code.toUpperCase().trim()]
+  );
 }
 
 // ================================================

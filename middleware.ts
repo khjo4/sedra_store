@@ -74,15 +74,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // حساب العميل فقط — المفضلة تعمل محلياً للزائر أيضاً
+  // حساب العميل فقط — /api/auth/me عام ويعيد user:null للزائر
   if (
     pathname === '/account' ||
-    pathname.startsWith('/account/') ||
-    pathname === '/api/auth/me'
+    pathname.startsWith('/account/')
   ) {
     const denied = await requireCustomer(request, pathname);
     if (denied) return denied;
     return applyCache(NextResponse.next(), pathname);
+  }
+
+  if (pathname === '/api/auth/me') {
+    return NextResponse.next();
   }
 
   // المفضلة: مسموحة للجميع على مستوى الـ middleware (الـ route يتحقق من الجلسة عند الحاجة)
